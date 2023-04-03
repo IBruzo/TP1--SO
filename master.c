@@ -1,9 +1,11 @@
 #include <stdio.h>          // printf
-#include <sys/types.h>      // fork, waitpid
+#include <sys/types.h>      // fork, waitpid, open
 #include <unistd.h>         // fork, execve, pipe, dup, close, read
 #include <sys/wait.h>       // waitpid
 #include <stdlib.h>         // exit
 #include <string.h>         // strlen
+#include <sys/stat.h>       // open
+#include <fcntl.h>          // open
 
 #define md5size 32
 
@@ -14,6 +16,9 @@
 // Recibe y almacena el resultado de cada esclavo en un buffer por orden de llegada
 // Al ser inicializado debe esperar la aparición del proceso Vista, caso positivo debe compartir el buffer con dicho proceso
 // Guarda el resultado en un archivos Results.txt
+
+// Last update, corre "./master.out README.md" ( README.md es el archivo que se esta codificando por medio del md5 )
+// Devuelve por salida estandar "md5sum : 6af203164b9a2dc9dbbbbcf15edb0331"
 
 int main(int argc, char *argv[])
 {
@@ -33,7 +38,7 @@ int main(int argc, char *argv[])
     int forkStatus = fork();
     if ( forkStatus != 0 ){  // FATHER
         waitpid(-1, &status, 0);
-    }else{              // CHILD    // tal vez es mejor estilo referenciar el array del pipe
+    }else{              // CHILD
         close(0); dup(3);                           // muevo el readpipe1
         close(1); dup(6);                           // muevo el writepipe2
         close(3); close(4); close(5); close(6);     // cierro todo lo innecesario
@@ -47,7 +52,30 @@ int main(int argc, char *argv[])
     int bytesRead = read( 5, resultBuffer, md5size );   // lee de [ 5 - readpipe2 ]
     if ( bytesRead != md5size ) printf( " Bytes read differ from md5sum's return size\n");
     printf("md5sum : %s\n", resultBuffer);
-    // deberia writear los paths que voy queriendo tras inicializar los procesos, y los procesos deberian estar leyendo constantemente del
-    // otro lado del pipe
+
+    // esto falla y no se por que :
+    // int fdResults = creat( "results.txt", 0777 );
+    // if ( write(fdResults, resultBuffer, md5size) == -1 ) { printf("File writing failed\n"); exit(1);}
+
+    // el pipe de escritura del slave deberia ser directo al archivo de texto?
+    // o hacer que el master lea del pipe y el escriba en el archivo de texto?
+
     return 0;
 }
+
+/*
+Funcionamiento ejemplificado de master y slave
+
+- se ejecuta el comando en bash con 100 archivos
+- el master recibe los archivos, 100 archivos
+- decide cuantos esclavos quiere usar, 5 esclavos
+- cada esclavo esclavo recibe la cantidad de archivos que puede digerir, 5 archivos
+- a medida que cada esclavo termina su tarea el master le vuelve a introducir una nueva tanda
+*/
+
+/*
+Posibles improvements :
+- referenciar directamente los pipes en vez de usar los numeros de los fds, menos magic numbers
+- hacer que los slaves escriban directamente en el results.txt
+- hay que closear todos los fd abiertos al final (?)
+*/
