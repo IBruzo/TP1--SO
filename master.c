@@ -18,22 +18,23 @@
 // Guarda el resultado en un archivos Results.txt
 
 // Last update, corre "./master.out README.md" ( README.md es el archivo que se esta codificando por medio del md5 )
-// Devuelve por salida estandar "md5sum : 6af203164b9a2dc9dbbbbcf15edb0331"
+// Devuelve por en un archivo "md5sum : 6af203164b9a2dc9dbbbbcf15edb0331"
 
 int main(int argc, char *argv[])
 {
 
-    if ( argc != 2 ) { printf("Invalid amount of arguments, should only receive a Path\n "); exit(1) ;}
+    if ( argc != 2 ) { printf("Invalid amount of arguments, should only receive a Path\n "); exit(1) ;} // desaparece eventualmente
 
     int pipefd_1[2];                // pipe a traves del cual se transmiten los archivos
     int pipefd_2[2];                // pipe a traves del cual se trasnmiten los resultados
 
     if ( pipe(pipefd_1) == -1 ) {printf("Error whilst creating anonymous pipe\n"); exit(1);}
     if ( pipe(pipefd_2) == -1 ) {printf("Error whilst creating anonymous pipe\n"); exit(1);}
+
     // fd master =  { [ 0 - stdin ], [ 1 - stdout ], [ 2 - stderr ], [ 3 - readpipe1 ], [ 4 - writepipe1 ], [ 5 - readpipe2 ], [ 6 - writepipe2 ] }
     // fd slave  =  { [ 3 - readpipe1 ], [ 6 - writepipe2 ], [ 2 - stderr ] }  (( OBJETIVO ))
 
-    if ( write(pipefd_1[1], argv[1], strlen(argv[1])) == -1 ){ printf("Pipe writing failed\n"); exit(1);}
+    if ( write(pipefd_1[1], argv[1], strlen( argv[1] ) ) == -1 ){ printf("Pipe writing failed\n"); exit(1);} // pasa a ser un ciclo for
     int status;
     int forkStatus = fork();
     if ( forkStatus != 0 ){  // FATHER
@@ -48,10 +49,12 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+    // lee del pipe
     char resultBuffer[md5size];
     int bytesRead = read( 5, resultBuffer, md5size );   // lee de [ 5 - readpipe2 ]
     if ( bytesRead != md5size ) printf( " Bytes read differ from md5sum's return size\n");
 
+    // crea el archivo
     int fdResults = open( "./results.txt", O_RDWR|O_CREAT , 0x00777 );
     if ( write(fdResults, resultBuffer, md5size) == -1 ) { printf("File writing failed\n"); exit(1);}
 
@@ -66,11 +69,21 @@ Funcionamiento ejemplificado de master y slave
 - decide cuantos esclavos quiere usar, 5 esclavos
 - cada esclavo esclavo recibe la cantidad de archivos que puede digerir, 5 archivos
 - a medida que cada esclavo termina su tarea el master le vuelve a introducir una nueva tanda
+
+- se manda inicialmente una cantidad >1 de archivos y luego se manda de a uno cada vez que se libera
 */
 
 /*
-Posibles improvements :
+Posibles improvements y tips :
+- lo mas practico es que cada slave tome un solo archivo para maximizar el paralelismo
+- usar perror() con el seteo de errno
 - referenciar directamente los pipes en vez de usar los numeros de los fds, menos magic numbers
-- hacer que los slaves escriban directamente en el results.txt
-- hay que closear todos los fd abiertos al final (?)
+- el master es el unico que sabe de la existencia del archivo
+- hay que closear todos los fd abiertos al final, cerrar el w-end del pipe envia un eof y se termina el while de lectura
+- combinar la idea de shared memory y results.txt, esta en la clase del 3/4
+- toda comunicacion entre master y slave debe ser a traves del pipe ( lo menciono en referencia al pasaje del factor inicial de los slaves )
+- envias tareas al slave cada vez este ocioso ( ocioso es un concepto del master, si le envio dos y recibo dos resultados es porque ya esta ocioso )
+- getline() para comer tareas del pipe
+- hay que tener cuidado con el read de los pipes del master, se usa un select o select_tut que monitorea las activaciones de distintas fds, explicado al finald e la clase del 3/4
+- sobre el select : el select se acciona, loopeas en los fds, encontras el que hizo saltar el select ( ISSET  macro ) y procedes a hacer el read al que da TRUE ( no hacer dos seguidos y puede retornar el eof ), reinicializar los fds en cada loop
 */

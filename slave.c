@@ -13,7 +13,6 @@
 
 int main(int argc, char *argv[])
 {
-    // if ( argc != 2 ) { printf("Invalid amount of arguments, should only receive a Path "); exit(1) ;} [ PARA TESTEO AISLADO ]
     int status;
     char buffer[md5size];
     // while ( read(0, buffer, md5size ) ) { }       // lee del pipe hasta que se cae
