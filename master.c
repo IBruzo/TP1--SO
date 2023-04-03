@@ -51,14 +51,9 @@ int main(int argc, char *argv[])
     char resultBuffer[md5size];
     int bytesRead = read( 5, resultBuffer, md5size );   // lee de [ 5 - readpipe2 ]
     if ( bytesRead != md5size ) printf( " Bytes read differ from md5sum's return size\n");
-    printf("md5sum : %s\n", resultBuffer);
 
-    // esto falla y no se por que :
-    // int fdResults = creat( "results.txt", 0777 );
-    // if ( write(fdResults, resultBuffer, md5size) == -1 ) { printf("File writing failed\n"); exit(1);}
-
-    // el pipe de escritura del slave deberia ser directo al archivo de texto?
-    // o hacer que el master lea del pipe y el escriba en el archivo de texto?
+    int fdResults = open( "./results.txt", O_RDWR|O_CREAT , 0x00777 );
+    if ( write(fdResults, resultBuffer, md5size) == -1 ) { printf("File writing failed\n"); exit(1);}
 
     return 0;
 }
