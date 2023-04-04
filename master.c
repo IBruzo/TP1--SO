@@ -15,8 +15,8 @@ LAST UPDATE :
 - por stdout devuelve info para debugear que use, y tambien crea el archivo results.txt
 
 results.txt :
-f4923e6253fdedc35888a5d022747d5a  master.c
 6af203164b9a2dc9dbbbbcf15edb0331  README.md
+f4923e6253fdedc35888a5d022747d5a  master.c
 f4923e6253fdedc35888a5d022747d5a  master.c
 7f27e0c1a11d61bef5c11e893e37741a  slave.c
 f4923e6253fdedc35888a5d022747d5a  master.c
@@ -25,38 +25,39 @@ f4923e6253fdedc35888a5d022747d5a  master.c
 
 int main(int argc, char *argv[])
 {
-    printf("\t\tArguments received : %d\n", argc-1);        // TESTING
+    printf("\t\tArguments received : %d\n", argc-1);                    // TESTING
 
-    errno = 0;                                              // seteo en 0 para manejo de errores
+    errno = 0;                                                          // seteo en 0 para manejo de errores
 
     int undigestedFiles = argc - 1;
 
     // creacion de pipes
-    int pipefd_1[2];                                        // pipe a traves del cual se transmiten los archivos
-    int pipefd_2[2];                                        // pipe a traves del cual se trasnmiten los resultados
+    int pipefd_1[2];                                                    // pipe a traves del cual se transmiten los archivos
+    int pipefd_2[2];                                                    // pipe a traves del cual se trasnmiten los resultados
     pipe(pipefd_1); CHECK_FAIL("pipe");
     pipe(pipefd_2); CHECK_FAIL("pipe");
 
 
-    // escritura en el pipe de las direcciones que necesita el slave ( delimiter = lineJump )
-    char* lineJump = "\n";
+    // escritura en el pipe de las direcciones, no dinamica con la lectura del pipe todavia
+    char* lineJump = "\n";                                              // delimitador/separador
     int i = 1;
     for (; i < argc; i++ ){
-        write(pipefd_1[1], argv[i], strlen(argv[i])); CHECK_FAIL("write");
-        write(pipefd_1[1], lineJump, strlen(lineJump)); CHECK_FAIL("write");
+        // ( ! ) tal vez tenga sentido atomizar esto
+        write(pipefd_1[WR_END], argv[i], strlen(argv[i])); CHECK_FAIL("write");
+        write(pipefd_1[WR_END], lineJump, strlen(lineJump)); CHECK_FAIL("write");
     }
 
 
     // llamado a esclavo
     int childStatus;
     int forkStatus = fork(); CHECK_FAIL("fork");
-    if ( forkStatus != 0 ){                             // Padre
-        waitpid(-1, &childStatus, 0);                   // hay que sacarlo
-    }else{                                              // Hijo
-        close(STDIN); dup(pipefd_1[0]);                 // muevo el readpipe1
-        close(STDOUT); dup(pipefd_2[1]);                // muevo el writepipe2
-        close(pipefd_1[0]); close(pipefd_1[1]);         // cierro los pipes extras
-        close(pipefd_2[0]); close(pipefd_2[1]);
+    if ( forkStatus != 0 ){                                             // Padre
+        waitpid(-1, &childStatus, 0);                                   // este wait es una cuestion, se pierde todo el paralelismo, el select tut resuelve la race condition que se genera cuando se saca esto ( creo )
+    }else{                                                              // Hijo
+        close(STDIN); dup(pipefd_1[RD_END]);                            // muevo el readpipe1
+        close(STDOUT); dup(pipefd_2[WR_END]);                           // muevo el writepipe2
+        close(pipefd_1[RD_END]); close(pipefd_1[WR_END]);               // cierro los pipes extras
+        close(pipefd_2[RD_END]); close(pipefd_2[WR_END]);
 
         char * const paramList[] = {"slave.out", NULL};
         execve("slave.out", paramList, 0); CHECK_FAIL("execve");
@@ -68,11 +69,12 @@ int main(int argc, char *argv[])
     char resultBuffer[MD5_SIZE];
     int bytesRead;
 
-    // escritura de archivo de resultados
+
+    // escritura de archivo de resultados, no dinamica con la escritura en el pipe
     for (i = 1; undigestedFiles > 0; i++ ){
-        int retSize =  MD5_SIZE+strlen(argv[i])+3;      // md5sum ret = ( codificacion + "  " + dir + "\n" )
-        bytesRead = read(5, resultBuffer, retSize);     // lee de [ 5 - readpipe2 ]
-        if ( bytesRead > 0 ){                           // si hay archivos grandes el slave puede tardar en dejar el resultado
+        int retSize =  MD5_SIZE+strlen(argv[i])+3;                      // md5sum ret = ( codificacion + "  " + dir + "\n" )
+        bytesRead = read(pipefd_2[RD_END], resultBuffer, retSize);      // lee de [ 5 - readpipe2 ]
+        if ( bytesRead > 0 ){                                           // si hay archivos grandes el slave puede tardar en dejar el resultado
             printf("\t\tbytes read : %d\n", bytesRead);     // TESTING
             write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
             undigestedFiles--;
