@@ -10,25 +10,30 @@
 
 /*
 LAST UPDATE :
-- el slave puede comer digerir tres archivos de una
-- joaco usa este comando "make clean; rm results.txt; make all; ./master.out README.md master.c slave.c; make clean"
+- el slave puede comer digerir cualquier cantidad de archivos
+- joaco usa este comando "make clean; rm results.txt; make all; ./master.out README.md master.c slave.c master.c master.c; make clean"
 - por stdout devuelve info para debugear que use, y tambien crea el archivo results.txt
 
 results.txt :
-7f27e0c1a11d61bef5c11e893e37741a  slave.c
-0a69c91472d20fe60da718a2a06f0b8b  master.c
+f4923e6253fdedc35888a5d022747d5a  master.c
 6af203164b9a2dc9dbbbbcf15edb0331  README.md
+f4923e6253fdedc35888a5d022747d5a  master.c
+7f27e0c1a11d61bef5c11e893e37741a  slave.c
+f4923e6253fdedc35888a5d022747d5a  master.c
+
 */
 
 int main(int argc, char *argv[])
 {
     printf("\t\tArguments received : %d\n", argc-1);        // TESTING
 
-    errno = 0;                      // seteo en 0 para manejo de errores
+    errno = 0;                                              // seteo en 0 para manejo de errores
+
+    int undigestedFiles = argc - 1;
 
     // creacion de pipes
-    int pipefd_1[2];                // pipe a traves del cual se transmiten los archivos
-    int pipefd_2[2];                // pipe a traves del cual se trasnmiten los resultados
+    int pipefd_1[2];                                        // pipe a traves del cual se transmiten los archivos
+    int pipefd_2[2];                                        // pipe a traves del cual se trasnmiten los resultados
     pipe(pipefd_1); CHECK_FAIL("pipe");
     pipe(pipefd_2); CHECK_FAIL("pipe");
 
@@ -46,7 +51,7 @@ int main(int argc, char *argv[])
     int childStatus;
     int forkStatus = fork(); CHECK_FAIL("fork");
     if ( forkStatus != 0 ){                             // Padre
-        waitpid(-1, &childStatus, 0);
+        waitpid(-1, &childStatus, 0);                   // hay que sacarlo
     }else{                                              // Hijo
         close(STDIN); dup(pipefd_1[0]);                 // muevo el readpipe1
         close(STDOUT); dup(pipefd_2[1]);                // muevo el writepipe2
@@ -64,11 +69,14 @@ int main(int argc, char *argv[])
     int bytesRead;
 
     // escritura de archivo de resultados
-    for (i = 1; i < argc; i++){
-        int retSize =  MD5_SIZE+3+strlen(argv[i]);      // md5sum devuelve : la codificacion (32 chars) + "  " (2 espacios) + dir (variable) + "\n" (1 LineJump)
+    for (i = 1; undigestedFiles > 0; i++ ){
+        int retSize =  MD5_SIZE+strlen(argv[i])+3;      // md5sum ret = ( codificacion + "  " + dir + "\n" )
         bytesRead = read(5, resultBuffer, retSize);     // lee de [ 5 - readpipe2 ]
-        printf("\t\tbytes read : %d\n", bytesRead);     // TESTING
-        write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
+        if ( bytesRead > 0 ){                           // si hay archivos grandes el slave puede tardar en dejar el resultado
+            printf("\t\tbytes read : %d\n", bytesRead);     // TESTING
+            write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
+            undigestedFiles--;
+        }
     }
 
     return 0;
