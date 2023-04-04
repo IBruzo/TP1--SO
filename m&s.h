@@ -10,11 +10,15 @@
 #include <sys/stat.h>       // open
 #include <fcntl.h>          // open
 #include <errno.h>          // errno
-#include <stdio.h>          // getline
+#include <string.h>         // strcat
 
-#define  _POSIX_C_SOURCE 200809L        // getline
+
+#define STDIN 0
+#define STDOUT 1
+#define STDERR 2
 #define ALL_PERMISSIONS 0x00777
 #define MD5_SIZE 32
+#define MAX_PATH_SIZE 1024
 #define CHECK_FAIL(functionName) ((errno != 0) ? (perror(functionName), exit(1)) : 0)
 
 #endif
