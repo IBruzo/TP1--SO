@@ -8,6 +8,7 @@
 int main(int argc, char *argv[])
 {
     char buffer[MAX_PATH_SIZE];
+
     read(0,buffer,MAX_PATH_SIZE*3); // cada slave recibe 3 archivos, esto pasa a ser un while luego
 
     const char *s = "\n"; char *token;

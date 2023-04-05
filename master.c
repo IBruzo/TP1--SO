@@ -23,44 +23,83 @@ f4923e6253fdedc35888a5d022747d5a  master.c
 
 */
 
+void transferPipeValues( int* pipeValues, int destination[][2], int position){
+    destination[position][0] = pipeValues[0];
+    destination[position][1] = pipeValues[1];
+    return;
+}
+
 int main(int argc, char *argv[])
 {
-    printf("\t\tArguments received : %d\n", argc-1);                    // TESTING
+
 
     errno = 0;                                                          // seteo en 0 para manejo de errores
+    // variables de ciclos
+    int i, N;
 
+    // calculo las subdivisiones
     int undigestedFiles = argc - 1;
+    int qSlaves = undigestedFiles/5;                                               // ej : recibo 20 archivos -> se usaran 4 slaves y
+    int initialLoad = undigestedFiles/10;                                          //      c/u recibe 2 de archivos como factor de carga inicial
+    // array con los fd del master
+    int slavePipes[2*qSlaves][2];                                       // 2 pipes por cada slave, cada pipe tiene read y write,
+    // array con los estados de cada slave
+    //char slaveState[qSlaves];                                           // estado de los slaves, ocioso o trabajando
 
-    // creacion de pipes
-    int pipefd_1[2];                                                    // pipe a traves del cual se transmiten los archivos
-    int pipefd_2[2];                                                    // pipe a traves del cual se trasnmiten los resultados
-    pipe(pipefd_1); CHECK_FAIL("pipe");
-    pipe(pipefd_2); CHECK_FAIL("pipe");
+    // TESTING
+    printf("\t\tArguments received : %d\n", undigestedFiles);
+    printf("\t\t#Slaves            : %d\n", qSlaves);
+    printf("\t\tInitial Load       : %d\n", initialLoad);
 
-
-    // escritura en el pipe de las direcciones, no dinamica con la lectura del pipe todavia
-    char* lineJump = "\n";                                              // delimitador/separador
-    int i = 1;
-    for (; i < argc; i++ ){
-        // ( ! ) tal vez tenga sentido atomizar esto
-        write(pipefd_1[WR_END], argv[i], strlen(argv[i])); CHECK_FAIL("write");
-        write(pipefd_1[WR_END], lineJump, strlen(lineJump)); CHECK_FAIL("write");
+    // creacion de pipes, tiene que haber una manera mas elegante @chatgpt
+    for (i = 0; i < qSlaves; i++ ){
+        int mtosPipe[2];
+        int stomPipe[2];
+        pipe(mtosPipe); CHECK_FAIL("pipe");
+        transferPipeValues(mtosPipe, slavePipes,2*i);
+        pipe(stomPipe); CHECK_FAIL("pipe");
+        transferPipeValues(stomPipe, slavePipes,2*i+1);
     }
 
+    /*
+    Visualizacion de los File Descriptors :
 
-    // llamado a esclavo
+    fd master = {       [ 0 - stdin ],      [ 1 - stdout ],         [ 2 - stderr ],        [ 3 - readpipe1 ],      [ 4 - writepipe1 ],
+                        [ 5 - readpipe2 ],  [ 6 - writepipe2 ] .... [ 2N+1 - readpipeN ],  [ 2(N+1) - writepipeN ] }
+
+    fd slave1 = { [ 3 - readpipe1 ],              [ 6 - writepipe2 ],         [ 2 - stderr ] }  (( OBJETIVO ))
+    fd slave2 = { [ 7 - readpipe3 ],              [ 10 - writepipe4 ],        [ 2 - stderr ] }
+    fd slave3 = { [ 11 - readpipe5 ],             [ 14 - writepipe6 ],        [ 2 - stderr ] }
+    ...
+    fd slaveN = { [ (4N-1) - readpipe(2N-1) ],    [ (4N+2) - writepipe(2N) ], [ 2 - stderr ] }
+    */
+
+
+
+    // creacion de esclavos con sus respectivos pipes de comunicacion
     int childStatus;
-    int forkStatus = fork(); CHECK_FAIL("fork");
-    if ( forkStatus != 0 ){                                             // Padre
-        waitpid(-1, &childStatus, 0);                                   // este wait es una cuestion, se pierde todo el paralelismo, el select tut resuelve la race condition que se genera cuando se saca esto ( creo )
-    }else{                                                              // Hijo
-        close(STDIN); dup(pipefd_1[RD_END]);                            // muevo el readpipe1
-        close(STDOUT); dup(pipefd_2[WR_END]);                           // muevo el writepipe2
-        close(pipefd_1[RD_END]); close(pipefd_1[WR_END]);               // cierro los pipes extras
-        close(pipefd_2[RD_END]); close(pipefd_2[WR_END]);
+    for ( N = 0; N < qSlaves; N=N+2 ){
+        printf("\t\tCreacion de esclavo %d\n", N+1);
+        int forkStatus = fork(); CHECK_FAIL("fork");
+        if ( forkStatus == 0 ){                                                         // Cada esclavo
+            close(STDIN); dup(slavePipes[N][RD_END]); CHECK_FAIL("dup");                // muevo al fd 0 el read del pipe 4N-1
+            close(STDOUT); dup(slavePipes[N+1][WR_END]); CHECK_FAIL("dup");             // muevo al fd 1 el write del pipe 4N+2
+            for( i = 3;  i < 4*(qSlaves)+3; i++ )                                       // cierro todos los pipes del 3 hasta 4*qSlaves+3
+                close(i);
 
-        char * const paramList[] = {"slave.out", NULL};
-        execve("slave.out", paramList, 0); CHECK_FAIL("execve");
+            char * const paramList[] = {"slave.out", NULL};                             // creacion del slaveN
+            execve("slave.out", paramList, 0); CHECK_FAIL("execve");
+        }
+    }
+    //while ( (waitpid(-1, &childStatus, 0)) > 0);
+
+
+    // escritura en el pipe, se le pasan todos los archivos al primer slave
+    char* lineJump = "\n";                                              // delimitador/separador
+    for (i = 1; i < argc; i++){
+        // ( ! ) tal vez tenga sentido atomizar esto
+        write(slavePipes[0][WR_END], argv[i], strlen(argv[i])); CHECK_FAIL("write");
+        write(slavePipes[0][WR_END], lineJump, strlen(lineJump)); CHECK_FAIL("write");
     }
 
 
@@ -72,10 +111,11 @@ int main(int argc, char *argv[])
 
     // escritura de archivo de resultados, no dinamica con la escritura en el pipe
     for (i = 1; undigestedFiles > 0; i++ ){
+
         int retSize =  MD5_SIZE+strlen(argv[i])+3;                      // md5sum ret = ( codificacion + "  " + dir + "\n" )
-        bytesRead = read(pipefd_2[RD_END], resultBuffer, retSize);      // lee de [ 5 - readpipe2 ]
+        bytesRead = read(slavePipes[1][RD_END], resultBuffer, retSize);      // lee de [ 5 - readpipe2 ]
+        printf("\t\tbytes read : %d\n", bytesRead);     // TESTING
         if ( bytesRead > 0 ){                                           // si hay archivos grandes el slave puede tardar en dejar el resultado
-            printf("\t\tbytes read : %d\n", bytesRead);     // TESTING
             write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
             undigestedFiles--;
         }
@@ -107,5 +147,7 @@ Posibles improvements y tips :
 - sobre el select : el select se acciona, loopeas en los fds, encontras el que hizo saltar el select ( ISSET  macro ) y procedes a hacer el read al que da TRUE ( no hacer dos seguidos y puede retornar el eof ), reinicializar los fds en cada loop
 - hay cosas hechas con syscalls que podrian hacerse con libreria de c, en especial manejo de archivos
 . modularizacion de funciones, loadPipe para cuando haya muchos slaves
-- revisar si hay permisos demas en el open
+
+
 */
+
