@@ -9,21 +9,25 @@ int main(int argc, char *argv[])
 {
     char buffer[MAX_PATH_SIZE];
 
-    read(0,buffer,MAX_PATH_SIZE*3); // cada slave recibe 3 archivos, esto pasa a ser un while luego
+    while ( (read(0,buffer,MAX_PATH_SIZE)) != EOF ){
+        const char *s = "\n"; char *token;
+        token = strtok(buffer, s);
 
-    const char *s = "\n"; char *token;
-    token = strtok(buffer, s);
-
-    int childStatus;
-    while( token != NULL ) {
-        int forkStatus = fork();
-        if ( forkStatus == 0 ){     // Hijo
-            char * const paramList[] = {"/usr/bin/md5sum", token ,NULL};
-            execve("/usr/bin/md5sum", paramList, 0); CHECK_FAIL("execve");
+        int childStatus;
+        while( token != NULL ) {
+            int forkStatus = fork();
+            if ( forkStatus == 0 ){     // Hijo
+                char * const paramList[] = {"/usr/bin/md5sum", token ,NULL};
+                execve("/usr/bin/md5sum", paramList, 0); CHECK_FAIL("execve");
+            }
+            token = strtok(NULL, s);
         }
-        token = strtok(NULL, s);
+
+        while ( waitpid(-1, &childStatus, 0) > 0);
     }
-    while ( waitpid(-1, &childStatus, 0) > 0);
+
+
+
 
     return 0;
 }

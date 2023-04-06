@@ -10,7 +10,8 @@
 #include <sys/stat.h>       // open
 #include <fcntl.h>          // open
 #include <errno.h>          // errno
-#include <string.h>         // strcat
+#include <string.h>         // strcat, memset
+#include <sys/select.h>     // select
 
 
 #define STDIN 0
