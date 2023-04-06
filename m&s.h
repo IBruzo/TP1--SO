@@ -12,7 +12,7 @@
 #include <errno.h>          // errno
 #include <string.h>         // strcat, memset
 #include <sys/select.h>     // select
-
+#include <math.h>           // ceil
 
 #define STDIN 0
 #define STDOUT 1

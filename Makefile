@@ -2,10 +2,10 @@ all: master slave
 
 # poner std=c99 en compilacion hace que no se permita usar getline >:(
 master: master.c
-	gcc -Wall -std=c99 $< -o $@.out
+	gcc -Wall -std=c99 -lm $< -o $@.out
 
 slave: slave.c
-	gcc -Wall -std=c99 $< -o $@.out
+	gcc -Wall -std=c99 -lm $< -o $@.out
 
 
 clean:

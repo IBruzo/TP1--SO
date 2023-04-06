@@ -44,10 +44,9 @@ int main(int argc, char *argv[])
     // faltan los buffers aca ( backlog )
     // Calculo las subdivisiones
     int undigestedFiles = argc - 1;                                                     // archivos que faltan procesar
-    int qSlaves = undigestedFiles/5;                                                    // cantidad de esclavos
+    int qSlaves = (int) ceil(undigestedFiles/5.0);                                                    // cantidad de esclavos
     int posNextFile = 1;                                                                // posicion del proximo archivo a procesar
-    int initialLoad = undigestedFiles/10;                                               // factor de carga inicial
-    initialLoad=1;                      // HARDCODEADO INTENCIONAL
+    int initialLoad = (int) ceil(undigestedFiles/10.0);                                               // factor de carga inicial
     // Declaro Arrays de esclavos
     int slavesReadPipe[qSlaves];                                                        // fd del cual cada esclavo lee el archivo que debe digerir
     int slavesWritePipe[qSlaves];                                                       // fd donde escribe el resultado de la digestion
@@ -80,6 +79,7 @@ int main(int argc, char *argv[])
     // Creacion y Seteo del Select
     int nfds = 4*qSlaves+3;
     fd_set readfds;                                                                     // array con los fds a monitorear
+    FD_ZERO(&readfds);                                                                  // limpio el set
     for ( N = 0; N < qSlaves; N++ )
         FD_SET(masterReadPipe[N], &readfds);                                            // seteo los fds de lectura del master
 
@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
 
 
     // Monitoreo y Escritura sobre results.txt de forma dinamica
-    printf("\n\t\tDynamic Loading:\n");
+    printf("\n\t\tStatic & Dynamic Loading:\n");
     while( undigestedFiles != 0 ){
 
         // Se cargan los pipes con el Load Inicial
@@ -153,9 +153,6 @@ int main(int argc, char *argv[])
                 write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
 
                 slaveStates[N]--;
-                if ( slaveStates[N] == 0 && undigestedFiles == 0 )
-                    close(masterWritePipe[N]);
-
                 qFdsToRead--;
                 undigestedFiles--;
 
@@ -169,7 +166,7 @@ int main(int argc, char *argv[])
                 }
                 //printf("\n\n");
                 //for ( int j = 0; j < qSlaves; j++ )
-                //    printf("\t unfinished jobs from slave [%d] : %d",j+1, slaveStates[j]);
+                //    printf("\t unfinished jobs from slave [%d] : %d\n",j+1, slaveStates[j]);
                 //printf("\n\n");
 
             }
@@ -184,9 +181,8 @@ int main(int argc, char *argv[])
                 FD_SET(masterReadPipe[N], &readfds);
         }
     }
-
-
-
+    for ( i = 3; i < 4*qSlaves+3; i++ )
+        close(i);
 
     return 0;
 }
@@ -195,7 +191,6 @@ int main(int argc, char *argv[])
 BACKLOG
 
 - Comentar la seccion de carga
-- Hay que pasar de strtok a getline
 - Hacer todo lo referido a Vista
 - Renombrar los buffers y ponerles tamaños adecuados, actualmente todos crean uno y le poenne MAXPATHSIZE
 
