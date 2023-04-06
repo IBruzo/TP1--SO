@@ -32,18 +32,10 @@ void concat(const char* str1, const char* str2, char* buffer) {
     buffer[size - 1] = '\0';
 }
 
-void transferPipeValues( int* pipeValues, int destination[][2], int position){
-    destination[position][0] = pipeValues[0];
-    destination[position][1] = pipeValues[1];
-    return;
-}
-
 int main(int argc, char *argv[])
 {
-
-
-    errno = 0;                                                          // seteo en 0 para manejo de errores
-
+    // Seteo en 0 de variable global
+    errno = 0;
 
     // Creacion de archivo de resultados
     int fdResults = open("./results.txt", O_APPEND|O_RDWR|O_CREAT , ALL_PERMISSIONS);
@@ -56,7 +48,7 @@ int main(int argc, char *argv[])
     int undigestedFiles = argc - 1;
     int qSlaves = undigestedFiles/5;
     int initialLoad = undigestedFiles/10;
-
+    initialLoad = 1;
 
     // Array de cantidad de trabajos
     char slaveStates[qSlaves];memset(slaveStates, 0, sizeof(slaveStates));              // cantidad de trabajo pendientes
@@ -68,13 +60,13 @@ int main(int argc, char *argv[])
 
 
     // TESTING
-    printf("\n\t\tGeneral Info:\n");
-    printf("\t\tUndigested Files   : %d\n", undigestedFiles);
-    printf("\t\t#Slaves            : %d\n", qSlaves);
-    printf("\t\tInitial Load       : %d\n", initialLoad);
+    //printf("\n\t\tGeneral Info:\n");
+    //printf("\t\tUndigested Files   : %d\n", undigestedFiles);
+    //printf("\t\t#Slaves            : %d\n", qSlaves);
+    //printf("\t\tInitial Load       : %d\n", initialLoad);
 
 
-    // Ordenamiento de los pipes creados
+    // Ordenamiento de pipes creados
     for (N = 0; N < qSlaves; N++ ){
         int mtosPipe[2];
         pipe(mtosPipe); CHECK_FAIL("pipe");
@@ -87,20 +79,14 @@ int main(int argc, char *argv[])
     }
 
 
-    // Creacion y seteo de FDs necesarios para el select
-    int nfds = 4*qSlaves+3;
-    fd_set readfds;
-    FD_ZERO(&readfds);
-    for ( N = 0; N < qSlaves; N++ )
-        FD_SET(masterReadPipe[N], &readfds);                                            // monitoreo si el extremo de lectura del master es bloqueante o no
 
 
 
     // Carga inicial de los pipes
-    printf("\n\t\tInitial Loading:\n");
+    //printf("\n\t\tInitial Loading:\n");
     char* lineJump = "\n";                                                              // delimitador/separador
     for ( posNextFile = 1; posNextFile <= initialLoad*qSlaves; posNextFile++){          // recorro los archivos entrantes
-        printf("\t\tLoading file %s to slave --- %d ---\n", argv[posNextFile], (posNextFile-1)%qSlaves+1);
+        //printf("\t\tLoading file %s to slave --- %d ---\n", argv[posNextFile], (posNextFile-1)%qSlaves+1);
         char buffer[MAX_PATH_SIZE];
         concat(argv[posNextFile], lineJump, buffer);
         write(masterWritePipe[(posNextFile-1)%qSlaves], buffer, strlen(buffer)); CHECK_FAIL("write");
@@ -123,10 +109,10 @@ int main(int argc, char *argv[])
 
 
     // Creacion de los Slaves
-    printf("\n\t\tSlaves Creation:\n");
+    //printf("\n\t\tSlaves Creation:\n");
     int childStatus;
     for ( N = 0; N < qSlaves; N++ ){
-        printf("\t\tCreation of Slave %d\n", N+1);
+        //printf("\t\tCreation of Slave %d\n", N+1);
         int forkStatus = fork(); CHECK_FAIL("fork");
         if ( forkStatus == 0 ){                                                         // Cada esclavo
             // Ordenamiento de FDs
@@ -141,15 +127,16 @@ int main(int argc, char *argv[])
     }
 
 
-    // TESTING
-    printf("\n\t\tGeneral Info:\n");
-    printf("\t\tUndigested Files   : %d\n", undigestedFiles);
-    printf("\t\t#Slaves            : %d\n", qSlaves);
-    printf("\t\tInitial Load       : %d\n", initialLoad);
+    // Creacion y seteo de FDs necesarios para el select
+    int nfds = 4*qSlaves+3;
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    for ( N = 0; N < qSlaves; N++ )
+        FD_SET(masterReadPipe[N], &readfds);                                            // monitoreo si el extremo de lectura del master es bloqueante o no
 
 
     // Monitoreo y Escritura sobre results.txt de forma dinamica
-    printf("\n\t\tDynamic Loading:\n");
+    //printf("\n\t\tDynamic Loading:\n");
     while( undigestedFiles != 0 ){
         char resultBuffer[MAX_PATH_SIZE];
         int bytesRead;
@@ -167,7 +154,7 @@ int main(int argc, char *argv[])
                 // int retSize =  MD5_SIZE+strlen(argv[posNextFile])+3;                              // md5sum ret = ( codificacion + "  " + dir + "\n" )
                 bytesRead = read(masterReadPipe[N], resultBuffer, MAX_PATH_SIZE);CHECK_FAIL("read");     // lee de [ 5 - readpipe2 ]
                 //printf("\t\tbytes read : %d\n", bytesRead);                             // TESTING
-                printf("Slave %d delivered %s\n", N+1, resultBuffer);
+                //printf("Slave %d delivered %s\n", N+1, resultBuffer);
                 write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
 
                 slaveStates[N]--;
@@ -178,17 +165,17 @@ int main(int argc, char *argv[])
                 undigestedFiles--;
 
                 if ( slaveStates[N] == 0 && posNextFile<argc ){
-                    printf("\t\tLoading file %s to slave --- %d ---\n", argv[posNextFile], N+1);            // Testing
+                    //printf("\t\tLoading file %s to slave --- %d ---\n", argv[posNextFile], N+1);            // Testing
                     char buffer[MAX_PATH_SIZE];
                     concat(argv[posNextFile], lineJump, buffer);
                     write(masterWritePipe[N],buffer, strlen(buffer)); CHECK_FAIL("write");
                     slaveStates[N]++;
                     posNextFile++;                                         // trabajando
                 }
-                printf("\n\n");
-                for ( int j = 0; j < qSlaves; j++ )
-                    printf("\t unfinished jobs from slave [%d] : %d",j+1, slaveStates[j]);
-                printf("\n\n");
+                //printf("\n\n");
+                //for ( int j = 0; j < qSlaves; j++ )
+                //    printf("\t unfinished jobs from slave [%d] : %d",j+1, slaveStates[j]);
+                //printf("\n\n");
 
             }
         }
