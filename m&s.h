@@ -17,8 +17,6 @@
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
-#define RD_END 0
-#define WR_END 1
 #define ALL_PERMISSIONS 0x00777
 #define MD5_SIZE 32
 #define MAX_PATH_SIZE 1024

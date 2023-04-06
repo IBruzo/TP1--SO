@@ -34,36 +34,34 @@ void concat(const char* str1, const char* str2, char* buffer) {
 
 int main(int argc, char *argv[])
 {
-    // Seteo en 0 de variable global
+    // Seteo en 0 de variable global para manejo de errores
     errno = 0;
-
     // Creacion de archivo de resultados
     int fdResults = open("./results.txt", O_APPEND|O_RDWR|O_CREAT , ALL_PERMISSIONS);
-
-    // Variables de ciclos
-    int posNextFile = 0;
-    int i, j, N;
-
+    // Declaro variables
+    int i, j, N;                                                                        // variables de ciclos
+    char* lineJump = "\n";                                                              // delimitador/separador
+    // faltan los buffers aca ( backlog )
     // Calculo las subdivisiones
-    int undigestedFiles = argc - 1;
-    int qSlaves = undigestedFiles/5;
-    int initialLoad = undigestedFiles/10;
-    initialLoad = 1;
-
-    // Array de cantidad de trabajos
-    char slaveStates[qSlaves];memset(slaveStates, 0, sizeof(slaveStates));              // cantidad de trabajo pendientes
-    // Arrays de FDs, dividos por funcion
+    int undigestedFiles = argc - 1;                                                     // archivos que faltan procesar
+    int qSlaves = undigestedFiles/5;                                                    // cantidad de esclavos
+    int initialLoad = undigestedFiles/10;                                               // factor de carga inicial
+    int posNextFile = 1;                                                                // posicion del proximo archivo a procesar
+    initialLoad=1;                      // HARDCODEADO INTENCIONAL
+    // Declaro Arrays de esclavos
     int slavesReadPipe[qSlaves];                                                        // fd del cual cada esclavo lee el archivo que debe digerir
     int slavesWritePipe[qSlaves];                                                       // fd donde escribe el resultado de la digestion
     int masterReadPipe[qSlaves];                                                        // fd del cual el master lee el resultado de la digestion
     int masterWritePipe[qSlaves];                                                       // fd donde el master escribe el archivo a digerir
+    char initiallyLoaded[qSlaves]; memset(initiallyLoaded, 0, sizeof(initiallyLoaded));
+    char slaveStates[qSlaves];memset(slaveStates, 0, sizeof(slaveStates));              // cantidad de trabajo pendientes
 
 
     // TESTING
-    //printf("\n\t\tGeneral Info:\n");
-    //printf("\t\tUndigested Files   : %d\n", undigestedFiles);
-    //printf("\t\t#Slaves            : %d\n", qSlaves);
-    //printf("\t\tInitial Load       : %d\n", initialLoad);
+    printf("\n\t\tGeneral Info:\n");
+    printf("\t\tUndigested Files   : %d\n", undigestedFiles);
+    printf("\t\t#Slaves            : %d\n", qSlaves);
+    printf("\t\tInitial Load       : %d\n", initialLoad);
 
 
     // Ordenamiento de pipes creados
@@ -79,19 +77,12 @@ int main(int argc, char *argv[])
     }
 
 
+    // Creacion y Seteo del Select
+    int nfds = 4*qSlaves+3;
+    fd_set readfds;                                                                     // array con los fds a monitorear
+    for ( N = 0; N < qSlaves; N++ )
+        FD_SET(masterReadPipe[N], &readfds);                                            // seteo los fds de lectura del master
 
-
-
-    // Carga inicial de los pipes
-    //printf("\n\t\tInitial Loading:\n");
-    char* lineJump = "\n";                                                              // delimitador/separador
-    for ( posNextFile = 1; posNextFile <= initialLoad*qSlaves; posNextFile++){          // recorro los archivos entrantes
-        //printf("\t\tLoading file %s to slave --- %d ---\n", argv[posNextFile], (posNextFile-1)%qSlaves+1);
-        char buffer[MAX_PATH_SIZE];
-        concat(argv[posNextFile], lineJump, buffer);
-        write(masterWritePipe[(posNextFile-1)%qSlaves], buffer, strlen(buffer)); CHECK_FAIL("write");
-        slaveStates[(posNextFile-1)%qSlaves]++;
-    }
 
     /*
     Visualizacion de los File Descriptors :
@@ -107,70 +98,74 @@ int main(int argc, char *argv[])
     */
 
 
-
     // Creacion de los Slaves
-    //printf("\n\t\tSlaves Creation:\n");
-    int childStatus;
+    printf("\n\t\tSlaves Creation:\n");
     for ( N = 0; N < qSlaves; N++ ){
-        //printf("\t\tCreation of Slave %d\n", N+1);
+        printf("\t\tCreation of Slave %d\n", N+1);
         int forkStatus = fork(); CHECK_FAIL("fork");
-        if ( forkStatus == 0 ){                                                         // Cada esclavo
+        if ( forkStatus == 0 ){                                                         // Logica de cada hijo :
             // Ordenamiento de FDs
-            close(STDIN); dup(slavesReadPipe[N]); CHECK_FAIL("dup");                    // muevo al fd 0 su FD de lectura
-            close(STDOUT); dup(slavesWritePipe[N]); CHECK_FAIL("dup");                  // muevo al fd 1 su FD de escritura
+            close(STDIN); dup(slavesReadPipe[N]); CHECK_FAIL("dup");                    // FD_0 =  FD_RD_END del mtosPipe
+            close(STDOUT); dup(slavesWritePipe[N]); CHECK_FAIL("dup");                  // FD_1 =  FD_WR_END del stomPipe
             for( i = 3;  i < 4*(qSlaves)+3; i++ )                                       // cierro pipes sobrantes
                 close(i);
-            // creacion del slave N
+            // Transformacion a Esclavo
             char * const paramList[] = {"slave.out", NULL};
             execve("slave.out", paramList, 0); CHECK_FAIL("execve");
         }
     }
 
 
-    // Creacion y seteo de FDs necesarios para el select
-    int nfds = 4*qSlaves+3;
-    fd_set readfds;
-    FD_ZERO(&readfds);
-    for ( N = 0; N < qSlaves; N++ )
-        FD_SET(masterReadPipe[N], &readfds);                                            // monitoreo si el extremo de lectura del master es bloqueante o no
-
 
     // Monitoreo y Escritura sobre results.txt de forma dinamica
-    //printf("\n\t\tDynamic Loading:\n");
+    printf("\n\t\tDynamic Loading:\n");
     while( undigestedFiles != 0 ){
+
+        // Se cargan los pipes con el Load Inicial
+        for ( N = 0 ;N < qSlaves && posNextFile <= initialLoad*qSlaves; N++ ){
+            if ( initiallyLoaded[N] == 0 && slaveStates[N]==0){
+                for (j = posNextFile; j < (posNextFile+initialLoad); j++){
+                    printf("\t\tStatic Loading of File '%s' to slave [ %d ]\n", argv[j], N+1);
+                    char buffer[MAX_PATH_SIZE];
+                    concat(argv[j], lineJump, buffer);
+                    write(masterWritePipe[N], buffer, strlen(buffer)); CHECK_FAIL("write");
+                    slaveStates[N]++;
+                }
+                posNextFile+=initialLoad;
+                initiallyLoaded[N] = 1;
+            }
+        }
+
         char resultBuffer[MAX_PATH_SIZE];
         int bytesRead;
+        // espero que haya una lectura no bloqueante de un pipe
         int qFdsToRead = select(nfds,&readfds, NULL, NULL, NULL);
         //printf("\t\tSelect activated with %d file descriptor(s) to read\n", qFdsToRead);
         for ( N = 0; N < qSlaves && qFdsToRead!=0; N++ ){ // HACER QUE SOLO REVISE LOS FDS QEU EL SELECT ESTA REVISANDO
             //printf("\n\t\tUndigested Files : %d    \n", undigestedFiles);
-
-
-            //printf("\n\t\tPositionNextFile : %d    \n", posNextFile);
+            //printf("\t\tPositionNextFile : %d    \n", posNextFile);
             //printf("\t\tChecking if master read pipe %d is readable, result = %d\n", N+1, FD_ISSET(masterReadPipe[N], &readfds));
 
             if ( FD_ISSET(masterReadPipe[N], &readfds)  ){
-
-                // int retSize =  MD5_SIZE+strlen(argv[posNextFile])+3;                              // md5sum ret = ( codificacion + "  " + dir + "\n" )
-                bytesRead = read(masterReadPipe[N], resultBuffer, MAX_PATH_SIZE);CHECK_FAIL("read");     // lee de [ 5 - readpipe2 ]
-                //printf("\t\tbytes read : %d\n", bytesRead);                             // TESTING
+                bytesRead = read(masterReadPipe[N], resultBuffer, MAX_PATH_SIZE);CHECK_FAIL("read");
+                //printf("\t\tbytes read : %d\n", bytesRead);
                 //printf("Slave %d delivered %s\n", N+1, resultBuffer);
                 write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
 
                 slaveStates[N]--;
-                if ( slaveStates[N] == 0 && undigestedFiles == 0 ){
+                if ( slaveStates[N] == 0 && undigestedFiles == 0 )
                     close(masterWritePipe[N]);
-                }
+
                 qFdsToRead--;
                 undigestedFiles--;
 
                 if ( slaveStates[N] == 0 && posNextFile<argc ){
-                    //printf("\t\tLoading file %s to slave --- %d ---\n", argv[posNextFile], N+1);            // Testing
+                    printf("\t\tDynamic Loading of File '%s' to slave [ %d ]\n", argv[posNextFile], N+1);            // Testing
                     char buffer[MAX_PATH_SIZE];
                     concat(argv[posNextFile], lineJump, buffer);
                     write(masterWritePipe[N],buffer, strlen(buffer)); CHECK_FAIL("write");
                     slaveStates[N]++;
-                    posNextFile++;                                         // trabajando
+                    posNextFile++;
                 }
                 //printf("\n\n");
                 //for ( int j = 0; j < qSlaves; j++ )
@@ -197,33 +192,23 @@ int main(int argc, char *argv[])
 }
 
 /*
-Funcionamiento ejemplificado de master y slave
+BACKLOG
 
-- se ejecuta el comando en bash con 100 archivos
-- el master recibe los archivos, 100 archivos
-- decide cuantos esclavos quiere usar, 5 esclavos
-- cada esclavo esclavo recibe la cantidad de archivos que puede digerir inicialmente, 5 archivos
-- a medida que cada esclavo termina su tarea el master le vuelve a introducir UN archivo
+- Comentar la seccion de carga
+- Hay que pasar de strtok a getline
+- Hacer todo lo referido a Vista
+- Renombrar los buffers y ponerles tamaños adecuados, actualmente todos crean uno y le poenne MAXPATHSIZE
 
 */
 
 /*
 Posibles improvements y tips :
-- lo mas practico es que cada slave tome un solo archivo para maximizar el paralelismo, despues de la carga inicial
-- ( ! ) el master es el unico que sabe de la existencia del archivo
-- hay que closear todos los fd abiertos al final, cerrar el w-end del pipe envia un eof y se termina el while de lectura
-- combinar la idea de shared memory y results.txt, esta en la clase del 3/4
-- toda comunicacion entre master y slave debe ser a traves del pipe ( lo menciono en referencia al pasaje del factor inicial de los slaves, entonces no es fijo ( ??? ) )
-- envias tareas al slave cada vez este ocioso ( ocioso es un concepto del master, si le envio dos y recibo dos resultados es porque ya esta ocioso )
-- hay que tener cuidado con el read de los pipes del master, se usa un select o select_tut que monitorea las activaciones de distintas fds, explicado al finald e la clase del 3/4
-- sobre el select : el select se acciona, loopeas en los fds, encontras el que hizo saltar el select ( ISSET  macro ) y procedes a hacer el read al que da TRUE ( no hacer dos seguidos y puede retornar el eof ), reinicializar los fds en cada loop
-- hay cosas hechas con syscalls que podrian hacerse con libreria de c, en especial manejo de archivos
-. modularizacion de funciones, loadPipe para cuando haya muchos slaves
 
-- REFACTORIZAR A 4 ARRAYS
-SLAVEREADPIPE[N]
-SLAVEWRITEPIPE[N]
-MASTERREADPIPE[N]
-MASTERWRITEPIPE[N]
+- De alguna forma integrar el load estatico al load dinamico <- PREGUNTAR A ARIEL
+- Combinar la idea de shared memory y results.txt, esta en la clase del 3/4
+- Toda comunicacion entre master y slave debe ser a traves del pipe ( lo menciono en referencia al pasaje del factor inicial de los slaves, entonces no es fijo ( ??? ) )
+- Hay cosas hechas con syscalls que podrian hacerse con libreria de c, en especial manejo de archivos, tal vez es mejor usar syscalls?
+. modularizacion de funciones!
+
 */
 
