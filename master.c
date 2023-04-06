@@ -45,8 +45,8 @@ int main(int argc, char *argv[])
     // Calculo las subdivisiones
     int undigestedFiles = argc - 1;                                                     // archivos que faltan procesar
     int qSlaves = undigestedFiles/5;                                                    // cantidad de esclavos
-    int initialLoad = undigestedFiles/10;                                               // factor de carga inicial
     int posNextFile = 1;                                                                // posicion del proximo archivo a procesar
+    int initialLoad = undigestedFiles/10;                                               // factor de carga inicial
     initialLoad=1;                      // HARDCODEADO INTENCIONAL
     // Declaro Arrays de esclavos
     int slavesReadPipe[qSlaves];                                                        // fd del cual cada esclavo lee el archivo que debe digerir
