@@ -7,6 +7,9 @@ master: master.c
 slave: slave.c
 	gcc -Wall -std=c99 -lm $< -o $@.out
 
+vista: vista.c
+	gcc -Wall -std=c99 -lm $< -o $@.out
+
 
 clean:
 	rm -f master.out slave.out
