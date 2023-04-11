@@ -27,7 +27,7 @@ for i in {65..84}; do
   # Write letter 20 times to file
   printf $(printf '\\x%x' $i)%.0s {1..20} >> testFiles/$(printf '%b' $(printf '\\x%x' $i)).txt
 done
-
+ 
 
 
 
