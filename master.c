@@ -34,12 +34,13 @@ void concat(const char* str1, const char* str2, char* buffer) {
 
 int main(int argc, char *argv[])
 {
+    sleep(2);
     // Seteo en 0 de variable global para manejo de errores
     errno = 0;
     // Creacion de archivo de resultados
     int fdResults = open("./results.txt", O_APPEND|O_RDWR|O_CREAT , ALL_PERMISSIONS);
     // Declaro variables
-    int i, j, N;                                                                        // variables de ciclos
+    int i, j, n;                                                                        // variables de ciclos
     char* lineJump = "\n";                                                              // delimitador/separador
     // faltan los buffers aca ( backlog )
     // Calculo las subdivisiones
@@ -62,17 +63,47 @@ int main(int argc, char *argv[])
     printf("\t\t#Slaves            : %d\n", qSlaves);
     printf("\t\tInitial Load       : %d\n", initialLoad);
 
+    int shm_fd; // Aquí guardaremos el file descriptor de la shared memory
+    char *shm_ptr;
+
+    // Creación de la shared memory
+    shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("shm_open");
+        exit(1);
+    }
+
+    // Darle el tamaño deseado a la shm
+    if (ftruncate(shm_fd, SHM_SIZE) == -1) { 
+        perror("ftruncate");
+        exit(1);
+    }
+
+    /**
+    * @brief Mapea un archivo en memoria compartida.
+    * @param addr Dirección deseada para la asignación. Si es NULL, se asigna automáticamente.
+    * @param length Longitud de bytes para asignar. SHM_SIZE
+    * @param prot Protección deseada para la región asignada. PROT_READ | PROT_WRITE
+    * @param flags Indica el tipo de asignación que se realizará. MAP_SHARED
+    * @param fd Descriptor de archivo abierto del archivo que se asignará. shm_fd
+    * @param offset Desplazamiento desde el inicio del archivo donde comienza la asignación. 0
+    * @return Retorna un puntero a la dirección de inicio de la región asignada, o MAP_FAILED si ocurre un error.
+    */
+    shm_ptr = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shm_ptr == MAP_FAILED) {
+        perror("mmap");
+        exit(1);
 
     // Ordenamiento de pipes creados
-    for (N = 0; N < qSlaves; N++ ){
+    for (n = 0; n < qSlaves; n++ ){
         int mtosPipe[2];
         pipe(mtosPipe); CHECK_FAIL("pipe");
-        slavesReadPipe[N] = mtosPipe[0];
-        masterWritePipe[N] = mtosPipe[1];
+        slavesReadPipe[n] = mtosPipe[0];
+        masterWritePipe[n] = mtosPipe[1];
         int stomPipe[2];
         pipe(stomPipe); CHECK_FAIL("pipe");
-        masterReadPipe[N] = stomPipe[0];
-        slavesWritePipe[N] = stomPipe[1];
+        masterReadPipe[n] = stomPipe[0];
+        slavesWritePipe[n] = stomPipe[1];
     }
 
 
@@ -80,8 +111,8 @@ int main(int argc, char *argv[])
     int nfds = 4*qSlaves+3;
     fd_set readfds;                                                                     // array con los fds a monitorear
     FD_ZERO(&readfds);                                                                  // limpio el set
-    for ( N = 0; N < qSlaves; N++ )
-        FD_SET(masterReadPipe[N], &readfds);                                            // seteo los fds de lectura del master
+    for ( n = 0; n < qSlaves; n++ )
+        FD_SET(masterReadPipe[n], &readfds);                                            // seteo los fds de lectura del master
 
 
     /*
@@ -100,13 +131,13 @@ int main(int argc, char *argv[])
 
     // Creacion de los Slaves
     printf("\n\t\tSlaves Creation:\n");
-    for ( N = 0; N < qSlaves; N++ ){
-        printf("\t\tCreation of Slave %d\n", N+1);
+    for ( n = 0; n < qSlaves; n++ ){
+        printf("\t\tCreation of Slave %d\n", n+1);
         int forkStatus = fork(); CHECK_FAIL("fork");
         if ( forkStatus == 0 ){                                                         // Logica de cada hijo :
             // Ordenamiento de FDs
-            close(STDIN); dup(slavesReadPipe[N]); CHECK_FAIL("dup");                    // FD_0 =  FD_RD_END del mtosPipe
-            close(STDOUT); dup(slavesWritePipe[N]); CHECK_FAIL("dup");                  // FD_1 =  FD_WR_END del stomPipe
+            close(STDIN); dup(slavesReadPipe[n]); CHECK_FAIL("dup");                    // FD_0 =  FD_RD_END del mtosPipe
+            close(STDOUT); dup(slavesWritePipe[n]); CHECK_FAIL("dup");                  // FD_1 =  FD_WR_END del stomPipe
             for( i = 3;  i < 4*(qSlaves)+3; i++ )                                       // cierro pipes sobrantes
                 close(i);
             // Transformacion a Esclavo
@@ -122,17 +153,17 @@ int main(int argc, char *argv[])
     while( undigestedFiles != 0 ){
 
         // Se cargan los pipes con el Load Inicial
-        for ( N = 0 ;N < qSlaves && posNextFile <= initialLoad*qSlaves; N++ ){
-            if ( initiallyLoaded[N] == 0 && slaveStates[N]==0){
+        for ( n = 0 ;n < qSlaves && posNextFile <= initialLoad*qSlaves; n++ ){
+            if ( initiallyLoaded[n] == 0 && slaveStates[n]==0){
                 for (j = posNextFile; j < (posNextFile+initialLoad); j++){
-                    printf("\t\tStatic Loading of File '%s' to slave [ %d ]\n", argv[j], N+1);
+                    printf("\t\tStatic Loading of File '%s' to slave [ %d ]\n", argv[j], n+1);
                     char buffer[MAX_PATH_SIZE];
                     concat(argv[j], lineJump, buffer);
-                    write(masterWritePipe[N], buffer, strlen(buffer)); CHECK_FAIL("write");
-                    slaveStates[N]++;
+                    write(masterWritePipe[n], buffer, strlen(buffer)); CHECK_FAIL("write");
+                    slaveStates[n]++;
                 }
                 posNextFile+=initialLoad;
-                initiallyLoaded[N] = 1;
+                initiallyLoaded[n] = 1;
             }
         }
 
@@ -141,27 +172,30 @@ int main(int argc, char *argv[])
         // espero que haya una lectura no bloqueante de un pipe
         int qFdsToRead = select(nfds,&readfds, NULL, NULL, NULL);
         //printf("\t\tSelect activated with %d file descriptor(s) to read\n", qFdsToRead);
-        for ( N = 0; N < qSlaves && qFdsToRead!=0; N++ ){ // HACER QUE SOLO REVISE LOS FDS QEU EL SELECT ESTA REVISANDO
+        for ( n = 0; n < qSlaves && qFdsToRead!=0; n++ ){ // HACER QUE SOLO REVISE LOS FDS QEU EL SELECT ESTA REVISANDO
             //printf("\n\t\tUndigested Files : %d    \n", undigestedFiles);
             //printf("\t\tPositionNextFile : %d    \n", posNextFile);
             //printf("\t\tChecking if master read pipe %d is readable, result = %d\n", N+1, FD_ISSET(masterReadPipe[N], &readfds));
 
-            if ( FD_ISSET(masterReadPipe[N], &readfds)  ){
-                bytesRead = read(masterReadPipe[N], resultBuffer, MAX_PATH_SIZE);CHECK_FAIL("read");
+            if ( FD_ISSET(masterReadPipe[n], &readfds)  ){
+                bytesRead = read(masterReadPipe[n], resultBuffer, MAX_PATH_SIZE);CHECK_FAIL("read");
                 //printf("\t\tbytes read : %d\n", bytesRead);
                 //printf("Slave %d delivered %s\n", N+1, resultBuffer);
                 write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
+                write(shm_fd, resultBuffer, bytesRead); CHECK_FAIL("write");
 
-                slaveStates[N]--;
+                up(&canRead);
+
+                slaveStates[n]--;
                 qFdsToRead--;
                 undigestedFiles--;
 
-                if ( slaveStates[N] == 0 && posNextFile<argc ){
-                    printf("\t\tDynamic Loading of File '%s' to slave [ %d ]\n", argv[posNextFile], N+1);            // Testing
+                if ( slaveStates[n] == 0 && posNextFile<argc ){
+                    printf("\t\tDynamic Loading of File '%s' to slave [ %d ]\n", argv[posNextFile], n+1);            // Testing
                     char buffer[MAX_PATH_SIZE];
                     concat(argv[posNextFile], lineJump, buffer);
-                    write(masterWritePipe[N],buffer, strlen(buffer)); CHECK_FAIL("write");
-                    slaveStates[N]++;
+                    write(masterWritePipe[n],buffer, strlen(buffer)); CHECK_FAIL("write");
+                    slaveStates[n]++;
                     posNextFile++;
                 }
                 //printf("\n\n");
@@ -172,13 +206,13 @@ int main(int argc, char *argv[])
             }
         }
         FD_ZERO(&readfds);
-        for ( N = 0; N < qSlaves; N++ ){
-            if ( slaveStates[N] == 0){
-                FD_SET(masterReadPipe[N], &readfds);
-                FD_CLR(masterReadPipe[N], &readfds);
+        for ( n = 0; n < qSlaves; n++ ){
+            if ( slaveStates[n] == 0){
+                FD_SET(masterReadPipe[n], &readfds);
+                FD_CLR(masterReadPipe[n], &readfds);
             }
             else
-                FD_SET(masterReadPipe[N], &readfds);
+                FD_SET(masterReadPipe[n], &readfds);
         }
     }
     for ( i = 3; i < 4*qSlaves+3; i++ )
@@ -204,6 +238,8 @@ Posibles improvements y tips :
 - Toda comunicacion entre master y slave debe ser a traves del pipe ( lo menciono en referencia al pasaje del factor inicial de los slaves, entonces no es fijo ( ??? ) )
 - Hay cosas hechas con syscalls que podrian hacerse con libreria de c, en especial manejo de archivos, tal vez es mejor usar syscalls?
 . modularizacion de funciones!
+- tamaño dinamico de la shared memory 
+
 
 */
 
