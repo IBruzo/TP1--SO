@@ -20,7 +20,6 @@ void concat(const char* str1, const char* str2, char* buffer) {
 
 int main(int argc, char *argv[])
 {
-
     // Seteo en 0 de variable global para manejo de errores
     errno = 0;
     // Creacion de archivo de resultados
@@ -84,15 +83,14 @@ int main(int argc, char *argv[])
     CHECK_FAIL("mmap");   
       // Se espera a la ejecucion del proceso vista
     sleep(5);
-    char vistaInformation[] = "/shalom\n"; // HARDCODEADA LA CANTIDAD DE ARCHIVOS
-    char cantArgStr[MAX_BUFFER_SIZE] = {0};
-    sprintf(cantArgStr,"%d",argc);
-    cantArgStr[strlen(cantArgStr)]='\n';
-    strcat(vistaInformation,cantArgStr);
-    write(STDOUT,vistaInformation, strlen(vistaInformation));         // en caso de uso con pipes
-    
-    //strcpy(shm_ptr,vistaInformation);
+  
 
+    char cantArgStr[MAX_BUFFER_SIZE] = {0};
+    sprintf(cantArgStr,"%d",argc-1);
+    int aux = strlen(cantArgStr);
+    cantArgStr[aux]='\n';
+    write(STDOUT,cantArgStr, aux+1);         // en caso de uso con pipes
+    
 
     // Creacion y Seteo del Select
     int nfds = 4 * qSlaves + 3;
@@ -124,13 +122,16 @@ int main(int argc, char *argv[])
         int forkStatus = fork(); CHECK_FAIL("fork");
         if ( forkStatus == 0 ){                                                         // Logica de cada hijo :
             // Ordenamiento de FDs
-            close(STDIN); dup(slavesReadPipe[n]); CHECK_FAIL("dup");                    // FD_0 =  FD_RD_END del mtosPipe
-            close(STDOUT); dup(slavesWritePipe[n]); CHECK_FAIL("dup");                  // FD_1 =  FD_WR_END del stomPipe
+            close(STDIN); dup(slavesReadPipe[n]); 
+            CHECK_FAIL("dup");                    // FD_0 =  FD_RD_END del mtosPipe
+            close(STDOUT); dup(slavesWritePipe[n]); 
+            CHECK_FAIL("dup");                  // FD_1 =  FD_WR_END del stomPipe
             for( i = 3;  i < 4*(qSlaves)+4; i++ )                                       // cierro pipes sobrantes, y el fd de shm
                 close(i);
             // Transformacion a Esclavo
             char * const paramList[] = {"slave.out", NULL};
-            execve("slave.out", paramList, 0); CHECK_FAIL("execve");
+            execve("slave.out", paramList, 0); 
+            CHECK_FAIL("execve");
         }
     }
 
@@ -173,7 +174,7 @@ int main(int argc, char *argv[])
                 write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
                 // escritura en la memoria compartida
              //   sem_wait(sem);                // comienzo de la region critica
-//write(shm_fd, resultBuffer, bytesRead); CHECK_FAIL("write");
+            //write(shm_fd, resultBuffer, bytesRead); CHECK_FAIL("write");
 
                 strcpy(shm_ptr,resultBuffer);
                 sem_post(sem);                // fin de la region critica

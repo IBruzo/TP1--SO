@@ -3,7 +3,7 @@
 
 int main(int argc, char * argv[])
 {
-    char * lifeLine = "Im still alive\n";
+    char * lifeLine = "Waiting for master...\n";
     int shm_fd; // Aquí guardaremos el file descriptor de la shared memory
     char * shm_ptr;
     int prev_length = 0;
@@ -11,7 +11,7 @@ int main(int argc, char * argv[])
     
     write(STDOUT, lifeLine, strlen(lifeLine));
     
-    shm_fd = shm_open(SHM_NAME, O_RDWR, 0666); // apertura de la shm que creo el master
+    shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666); // apertura de la shm que creo el master
     CHECK_FAIL("shm_open"); 
 
     ftruncate(shm_fd, SHM_SIZE); // Darle el tamaño deseado a la shm
@@ -23,21 +23,32 @@ int main(int argc, char * argv[])
     sem = sem_open(SEM_NAME, O_CREAT, 0666, 1); // chequear inicializacion en 1, SIN SEMAFORO POR AHORA
 
     if(argc==2){ // si se ejecuta despues se recibe el nombre de la shm y el sem, tambien el tamaño de la shm mem?
-        write(STDOUT, lifeLine, strlen(lifeLine));
-        int i;
         
         int length = strlen(shm_ptr);
 
-
-        sem_wait(sem);
-        write(STDOUT, shm_ptr, MAX_BUFFER_SIZE);
-        sem_wait(sem);
-        write(STDOUT, shm_ptr, MAX_BUFFER_SIZE);
+        for (size_t i = 0; i < atoi(argv[1]); i++){
+            sem_wait(sem);
+            write(STDOUT, shm_ptr, MAX_BUFFER_SIZE);
+            CHECK_FAIL("write");
+        }
         sem_close(sem);
 
 
     }else if(argc==1){ //si se ejecuta con el pipe, tiene que leer del pipe los dos parametros que necesita
         char readBuffer[MAX_PATH_SIZE];
+        read(0, readBuffer, MAX_PATH_SIZE);
+        CHECK_FAIL("read");
+        
+
+        for (size_t i = 0; i < atoi(readBuffer); i++){
+            sem_wait(sem);
+            write(STDOUT, shm_ptr, MAX_BUFFER_SIZE);
+            CHECK_FAIL("write");
+        }
+        sem_close(sem);
+        
+        
+        /* char readBuffer[MAX_PATH_SIZE];
         read(STDIN, readBuffer, MAX_PATH_SIZE-1);
         const char *s = "\n";
         char *token;
@@ -49,20 +60,20 @@ int main(int argc, char * argv[])
        
         }
         memset( readBuffer, 0, sizeof(readBuffer));
+        */
 
-
-        while(prev_length < SHM_SIZE){
-            //sem_wait(sem);
-            // down(&canRead);
+        /* while(prev_length < SHM_SIZE){
+            sem_wait(sem);
 
             int length = strlen(shm_ptr);
-            write(1, shm_ptr, length);
-            //if (length > prev_length) {
-            //    printf("%s", shm_ptr + prev_length);  // Print new data to stdout
-            //    prev_length = length;
-            //}
+            
+            if (length > prev_length) {
+                write(1, shm_ptr + prev_length, length - prev_length);
+                //printf("%s", shm_ptr + prev_length);  // Print new data to stdout
+                prev_length = length;
+            }
             //sem_post(sem);
-        }
+        } */
 
     }else{
         perror("wrong ammount of parameters");
