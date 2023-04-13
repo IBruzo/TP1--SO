@@ -35,6 +35,7 @@ int main(int argc, char * argv[]){
     }else{
         errorHandler("wrong ammount of parameters for process\n");
     }
+    sem_close(&sem);
 }
 
 // pasar a una lib

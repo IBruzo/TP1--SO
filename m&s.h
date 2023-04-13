@@ -27,9 +27,9 @@
 #define SHM_NAME "/shalom"
 #define SHM_SIZE 2048 //tamaño arbitrario
 
-typedef int sem_t;
-sem_t canRead = 0;
-sem_t empty = SHM_SIZE;
+typedef int sem;
+sem canRead = 0;
+sem empty = SHM_SIZE;
 
 // typedef struct
 // {
