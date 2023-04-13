@@ -25,18 +25,15 @@
 #define CHECK_FAIL(functionName) ((errno != 0) ? (perror(functionName), exit(1)) : 0)
 #define SEM_NAME "countingSemaphore"
 #define SHM_NAME "/shalom"
-#define SHM_SIZE 2048 //tamaño arbitrario
+#define SHM_SIZE 2048       // tamaño arbitrario
+#define MAX_BUFFER_SIZE 500
 
 int ftruncate(int fd, off_t length); // esto resuelvo un warning raro que habia
 
 typedef int sem;
 sem canRead = 0;
 sem empty = SHM_SIZE;
-// typedef struct
-// {
-//     sem_t *access;
-//     char name[NAME_MAX - 4];
-// } sem_t;
+
 
 
 #endif

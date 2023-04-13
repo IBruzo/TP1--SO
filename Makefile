@@ -12,6 +12,6 @@ vista: vista.c
 
 
 clean:
-	rm -f master.out slave.out vista.out
+	rm -f master.out slave.out vista.out results.txt
 
 .PHONY: all clean

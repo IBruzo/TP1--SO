@@ -24,10 +24,10 @@ int main(int argc, char *argv[])
     // Seteo en 0 de variable global para manejo de errores
     errno = 0;
     // Creacion de archivo de resultados
-    int fdResults = open("./results.txt", O_APPEND|O_RDWR|O_CREAT , ALL_PERMISSIONS);
+    int fdResults = open("./results.txt", O_APPEND | O_RDWR | O_CREAT , ALL_PERMISSIONS);
     // Declaro variables
     int i, j, n;                                                                        // variables de ciclos
-    char* lineJump = "\n";                                                              // delimitador/separador
+    char * lineJump = "\n";                                                              // delimitador/separador
     // faltan los buffers aca ( backlog )
     // Calculo las subdivisiones
     int undigestedFiles = argc - 1;                                                     // archivos que faltan procesar
@@ -39,8 +39,10 @@ int main(int argc, char *argv[])
     int slavesWritePipe[qSlaves];                                                       // fd donde escribe el resultado de la digestion
     int masterReadPipe[qSlaves];                                                        // fd del cual el master lee el resultado de la digestion
     int masterWritePipe[qSlaves];                                                       // fd donde el master escribe el archivo a digerir
-    char initiallyLoaded[qSlaves]; memset(initiallyLoaded, 0, sizeof(initiallyLoaded));
-    char slaveStates[qSlaves];memset(slaveStates, 0, sizeof(slaveStates));              // cantidad de trabajo pendientes
+    char initiallyLoaded[qSlaves]; 
+    memset(initiallyLoaded, 0, sizeof(initiallyLoaded));
+    char slaveStates[qSlaves];
+    memset(slaveStates, 0, sizeof(slaveStates));              // cantidad de trabajo pendientes
 
 
     // TESTING
@@ -56,6 +58,7 @@ int main(int argc, char *argv[])
         pipe(mtosPipe); CHECK_FAIL("pipe");
         slavesReadPipe[n] = mtosPipe[0];
         masterWritePipe[n] = mtosPipe[1];
+        
         int stomPipe[2];
         pipe(stomPipe); CHECK_FAIL("pipe");
         masterReadPipe[n] = stomPipe[0];
@@ -65,26 +68,39 @@ int main(int argc, char *argv[])
 
     // Manejo de Semaforos y Shared Memory
     int shm_fd;             // Aquí guardaremos el file descriptor de la shared memory
-    char *shm_ptr;          // puntero de escritura en la shared memory
+    char * shm_ptr;          // puntero de escritura en la shared memory
     sem_t * sem;            // counting semaphore
 
-    sem = sem_open(SEM_NAME, O_CREAT, 0666, 1); CHECK_FAIL("sem_open");         // creacion del semaforo, chequear inicializacion en 1
-    shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666); CHECK_FAIL("shm_fd");  // creación de la shared memory
-    ftruncate(shm_fd, SHM_SIZE); CHECK_FAIL("ftruncate");                       // Darle el tamaño deseado a la shm
-    shm_ptr = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);CHECK_FAIL("mmap");   // mapeo a la memoria virtual
+    sem = sem_open(SEM_NAME, O_CREAT, 0666, 1); // creacion del semaforo, chequear inicializacion en 1
+    CHECK_FAIL("sem_open");         
 
-    char * vistaInformation = "/shalom\ncountingSemaphore\n20\n"; // HARDCODEADA LA CANTIDAD DE ARCHIVOS
-    write(1,vistaInformation, strlen(vistaInformation));                       // en caso de uso con pipes
+    shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);// creación de la shared memory
+    CHECK_FAIL("shm_fd");
 
-    // se espera a la ejecucion del proceso vista
-    sleep(2);
+    ftruncate(shm_fd, SHM_SIZE); // Darle el tamaño deseado a la shm
+    CHECK_FAIL("ftruncate");
+
+    shm_ptr = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0); // mapeo a la memoria virtual
+    CHECK_FAIL("mmap");   
+      // Se espera a la ejecucion del proceso vista
+    sleep(5);
+    char vistaInformation[] = "/shalom\n"; // HARDCODEADA LA CANTIDAD DE ARCHIVOS
+    char cantArgStr[MAX_BUFFER_SIZE] = {0};
+    sprintf(cantArgStr,"%d",argc);
+    cantArgStr[strlen(cantArgStr)]='\n';
+    strcat(vistaInformation,cantArgStr);
+    write(STDOUT,vistaInformation, strlen(vistaInformation));         // en caso de uso con pipes
+    
+    //strcpy(shm_ptr,vistaInformation);
+
 
     // Creacion y Seteo del Select
-    int nfds = 4*qSlaves+3;
+    int nfds = 4 * qSlaves + 3;
     fd_set readfds;                                                                     // array con los fds a monitorear
     FD_ZERO(&readfds);                                                                  // limpio el set
-    for ( n = 0; n < qSlaves; n++ )
+    for ( n = 0; n < qSlaves; n++ ){
         FD_SET(masterReadPipe[n], &readfds);                                            // seteo los fds de lectura del master
+    }
 
 
     /*
@@ -121,17 +137,17 @@ int main(int argc, char *argv[])
 
 
     // Monitoreo y Escritura sobre results.txt de forma dinamica
-    ////printf("\n\t\tStatic & Dynamic Loading:\n");
+    // printf("\n\t\tStatic & Dynamic Loading:\n");
     while( undigestedFiles != 0 ){
 
         // Se cargan los pipes con el Load Inicial, cargado estatico
-        for ( n = 0 ;n < qSlaves && posNextFile <= initialLoad*qSlaves; n++ ){
-            if ( initiallyLoaded[n] == 0 && slaveStates[n]==0){
-                for (j = posNextFile; j < (posNextFile+initialLoad); j++){
+        for ( n = 0 ; n < qSlaves && posNextFile <= initialLoad * qSlaves ; n++ ){
+            if ( initiallyLoaded[n] == 0 && slaveStates[n] == 0 ){
+                for ( j = posNextFile ; j < (posNextFile + initialLoad) ; j++ ){
                     ////printf("\t\tStatic Loading of File '%s' to slave [ %d ]\n", argv[j], n+1);
                     char buffer[MAX_PATH_SIZE];
-                    concat(argv[j], lineJump, buffer);
-                    write(masterWritePipe[n], buffer, strlen(buffer)); CHECK_FAIL("write");
+                    concat(argv[j] , lineJump , buffer);
+                    write(masterWritePipe[n] , buffer , strlen(buffer)); CHECK_FAIL("write");
                     slaveStates[n]++;
                 }
                 posNextFile+=initialLoad;
@@ -139,26 +155,28 @@ int main(int argc, char *argv[])
             }
         }
 
-        char resultBuffer[MAX_PATH_SIZE];
+        char resultBuffer[MAX_BUFFER_SIZE];
         int bytesRead;
         // espero que haya una lectura no bloqueante de un pipe
         int qFdsToRead = select(nfds,&readfds, NULL, NULL, NULL);
         //printf("\t\tSelect activated with %d file descriptor(s) to read\n", qFdsToRead);
-        for ( n = 0; n < qSlaves && qFdsToRead!=0; n++ ){
+        for ( n = 0; n < qSlaves && qFdsToRead != 0 ; n++ ){
             //printf("\n\t\tUndigested Files : %d    \n", undigestedFiles);
             //printf("\t\tPositionNextFile : %d    \n", posNextFile);
             //printf("\t\tChecking if master read pipe %d is readable, result = %d\n", N+1, FD_ISSET(masterReadPipe[N], &readfds));
 
-            if ( FD_ISSET(masterReadPipe[n], &readfds)  ){
-                bytesRead = read(masterReadPipe[n], resultBuffer, MAX_PATH_SIZE);CHECK_FAIL("read");
+            if ( FD_ISSET(masterReadPipe[n] , &readfds)  ){
+                bytesRead = read(masterReadPipe[n], resultBuffer, MAX_BUFFER_SIZE); CHECK_FAIL("read");
                 //printf("\t\tbytes read : %d\n", bytesRead);
                 //printf("Slave %d delivered %s\n", N+1, resultBuffer);
                 // escritura en el archivo Results.txt
                 write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
                 // escritura en la memoria compartida
-                //sem_wait(sem);                // comienzo de la region critica
-                write(shm_fd, resultBuffer, bytesRead); CHECK_FAIL("write");
-                //sem_post(sem);                // fin de la region critica
+             //   sem_wait(sem);                // comienzo de la region critica
+//write(shm_fd, resultBuffer, bytesRead); CHECK_FAIL("write");
+
+                strcpy(shm_ptr,resultBuffer);
+                sem_post(sem);                // fin de la region critica
                 // up(&canRead);
 
                 slaveStates[n]--;
@@ -192,9 +210,8 @@ int main(int argc, char *argv[])
     }
     for ( i = 3; i < 4*qSlaves+4; i++ )
         close(i);
-
+    sem_close(sem);
     shm_unlink(SHM_NAME);
-
     return 0;
 }
 
@@ -217,18 +234,4 @@ Posibles improvements y tips :
 . modularizacion de funciones!
 - tamaño dinamico de la shared memory
 
-
 */
-
-    /**
-    * @brief Mapea un archivo en memoria compartida.
-    * @param addr Dirección deseada para la asignación. Si es NULL, se asigna automáticamente.
-    * @param length Longitud de bytes para asignar. SHM_SIZE
-    * @param prot Protección deseada para la región asignada. PROT_READ | PROT_WRITE
-    * @param flags Indica el tipo de asignación que se realizará. MAP_SHARED
-    * @param fd Descriptor de archivo abierto del archivo que se asignará. shm_fd
-    * @param offset Desplazamiento desde el inicio del archivo donde comienza la asignación. 0
-    * @return Retorna un puntero a la dirección de inicio de la región asignada, o MAP_FAILED si ocurre un error.
-    */
-
-

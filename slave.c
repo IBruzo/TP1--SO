@@ -40,21 +40,29 @@ int main(int argc, char *argv[])
 {
     char buffer[MAX_PATH_SIZE];
     while ( (read(0,buffer,MAX_PATH_SIZE)) != EOF ){
-        const char *s = "\n"; char *token;
+        const char *s = "\n"; 
+        char *token;
         token = strtok(buffer, s);
 
         int childStatus;
         while( token != NULL ) {
+            // pipe buffer ida : hola.txt
+            // pipe buffer vuelta : pid:3043 dsfgfsad7fg6edf87g6s hola.txt
+            
+            // write "pid getpid()" cheqeuar buffers que van a explotar
             int forkStatus = fork();
             if ( forkStatus == 0 ){     // Hijo
+                
                 char * const paramList[] = {"/usr/bin/md5sum", token ,NULL};
-                execve("/usr/bin/md5sum", paramList, 0); CHECK_FAIL("execve");
+
+                execve("/usr/bin/md5sum", paramList, 0); 
+                CHECK_FAIL("execve");
             }
             token = strtok(NULL, s);
         }
         memset( buffer, 0, sizeof(buffer));
         while ( waitpid(-1, &childStatus, 0) > 0);
-
+        
     }
     return 0;
 }
