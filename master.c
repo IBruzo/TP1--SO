@@ -8,21 +8,7 @@
 // Al ser inicializado debe esperar la aparición del proceso Vista, caso positivo debe compartir el buffer con dicho proceso
 // Guarda el resultado en un archivos Results.txt
 
-/*
-LAST UPDATE :
-- el slave puede comer digerir cualquier cantidad de archivos
-- joaco usa este comando "make clean; rm results.txt; make all; ./master.out README.md master.c slave.c master.c master.c; make clean"
-- por stdout devuelve info para debugear que use, y tambien crea el archivo results.txt
-
-results.txt :
-6af203164b9a2dc9dbbbbcf15edb0331  README.md
-f4923e6253fdedc35888a5d022747d5a  master.c
-f4923e6253fdedc35888a5d022747d5a  master.c
-7f27e0c1a11d61bef5c11e893e37741a  slave.c
-f4923e6253fdedc35888a5d022747d5a  master.c
-
-*/
-
+// pasar a una lib
 void concat(const char* str1, const char* str2, char* buffer) {
     size_t len1 = strlen(str1);
     size_t len2 = strlen(str2);
@@ -34,6 +20,7 @@ void concat(const char* str1, const char* str2, char* buffer) {
 
 int main(int argc, char *argv[])
 {
+    // se espera a la ejecucion del proceso vista
     sleep(2);
     // Seteo en 0 de variable global para manejo de errores
     errno = 0;
@@ -63,21 +50,18 @@ int main(int argc, char *argv[])
     printf("\t\t#Slaves            : %d\n", qSlaves);
     printf("\t\tInitial Load       : %d\n", initialLoad);
 
-    int shm_fd; // Aquí guardaremos el file descriptor de la shared memory
-    char *shm_ptr;
+    int shm_fd;             // Aquí guardaremos el file descriptor de la shared memory
+    char *shm_ptr;          // puntero de escritura en la shared memory
+    sem_t * sem;            // counting semaphore
+
+    // creacion del semaforo
+    sem = sem_open(SEM_NAME, O_CREAT, 0666, 1); // chequear inicializacion en 1
 
     // Creación de la shared memory
-    shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
-    if (shm_fd == -1) {
-        perror("shm_open");
-        exit(1);
-    }
+    shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666); CHECK_FAIL("shm_fd");
 
     // Darle el tamaño deseado a la shm
-    if (ftruncate(shm_fd, SHM_SIZE) == -1) { 
-        perror("ftruncate");
-        exit(1);
-    }
+    ftruncate(shm_fd, SHM_SIZE); CHECK_FAIL("ftruncate");
 
     /**
     * @brief Mapea un archivo en memoria compartida.
@@ -89,10 +73,7 @@ int main(int argc, char *argv[])
     * @param offset Desplazamiento desde el inicio del archivo donde comienza la asignación. 0
     * @return Retorna un puntero a la dirección de inicio de la región asignada, o MAP_FAILED si ocurre un error.
     */
-    shm_ptr = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (shm_ptr == MAP_FAILED) {
-        perror("mmap");
-        exit(1);
+    shm_ptr = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);CHECK_FAIL("mmap");
 
     // Ordenamiento de pipes creados
     for (n = 0; n < qSlaves; n++ ){
@@ -152,7 +133,7 @@ int main(int argc, char *argv[])
     printf("\n\t\tStatic & Dynamic Loading:\n");
     while( undigestedFiles != 0 ){
 
-        // Se cargan los pipes con el Load Inicial
+        // Se cargan los pipes con el Load Inicial, cargado estatico
         for ( n = 0 ;n < qSlaves && posNextFile <= initialLoad*qSlaves; n++ ){
             if ( initiallyLoaded[n] == 0 && slaveStates[n]==0){
                 for (j = posNextFile; j < (posNextFile+initialLoad); j++){
@@ -172,7 +153,7 @@ int main(int argc, char *argv[])
         // espero que haya una lectura no bloqueante de un pipe
         int qFdsToRead = select(nfds,&readfds, NULL, NULL, NULL);
         //printf("\t\tSelect activated with %d file descriptor(s) to read\n", qFdsToRead);
-        for ( n = 0; n < qSlaves && qFdsToRead!=0; n++ ){ // HACER QUE SOLO REVISE LOS FDS QEU EL SELECT ESTA REVISANDO
+        for ( n = 0; n < qSlaves && qFdsToRead!=0; n++ ){
             //printf("\n\t\tUndigested Files : %d    \n", undigestedFiles);
             //printf("\t\tPositionNextFile : %d    \n", posNextFile);
             //printf("\t\tChecking if master read pipe %d is readable, result = %d\n", N+1, FD_ISSET(masterReadPipe[N], &readfds));
@@ -181,10 +162,14 @@ int main(int argc, char *argv[])
                 bytesRead = read(masterReadPipe[n], resultBuffer, MAX_PATH_SIZE);CHECK_FAIL("read");
                 //printf("\t\tbytes read : %d\n", bytesRead);
                 //printf("Slave %d delivered %s\n", N+1, resultBuffer);
+                // escritura en el archivo Results.txt
                 write(fdResults, resultBuffer, bytesRead); CHECK_FAIL("write");
+                // escritura en la memoria compartida
+                sem_wait(sem);
+                // region critica
                 write(shm_fd, resultBuffer, bytesRead); CHECK_FAIL("write");
-
-                up(&canRead);
+                sem_post(sem);
+                // up(&canRead);
 
                 slaveStates[n]--;
                 qFdsToRead--;
@@ -218,6 +203,8 @@ int main(int argc, char *argv[])
     for ( i = 3; i < 4*qSlaves+3; i++ )
         close(i);
 
+    shm_unlink(SHM_NAME);
+
     return 0;
 }
 
@@ -238,7 +225,7 @@ Posibles improvements y tips :
 - Toda comunicacion entre master y slave debe ser a traves del pipe ( lo menciono en referencia al pasaje del factor inicial de los slaves, entonces no es fijo ( ??? ) )
 - Hay cosas hechas con syscalls que podrian hacerse con libreria de c, en especial manejo de archivos, tal vez es mejor usar syscalls?
 . modularizacion de funciones!
-- tamaño dinamico de la shared memory 
+- tamaño dinamico de la shared memory
 
 
 */
