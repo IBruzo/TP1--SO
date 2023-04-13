@@ -27,10 +27,11 @@
 #define SHM_NAME "/shalom"
 #define SHM_SIZE 2048 //tamaño arbitrario
 
+int ftruncate(int fd, off_t length); // esto resuelvo un warning raro que habia
+
 typedef int sem;
 sem canRead = 0;
 sem empty = SHM_SIZE;
-
 // typedef struct
 // {
 //     sem_t *access;
