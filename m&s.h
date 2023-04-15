@@ -15,6 +15,7 @@
 #include <math.h>           // ceil
 #include <sys/mman.h>       // shm_open, mmap, shm_unlink
 #include <semaphore.h>      // sem_open, sem_wait, sem_post
+#include "memAndSync.h"
 
 #define STDIN 0
 #define STDOUT 1
