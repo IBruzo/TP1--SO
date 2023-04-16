@@ -1,15 +1,18 @@
 #ifndef MEMANDSYNC_H
 #define MEMANDSYNC_H
 
-#include <sys/mman.h>       // shm_open, mmap, shm_unlink
-#include <semaphore.h>      // sem_open, sem_wait, sem_post
+#include <stdio.h>          // printf
+#include <sys/types.h>      // fork, waitpid, open, ftruncate
+#include <unistd.h>         // fork, execve, pipe, dup, close, read, ftruncate
+#include <sys/wait.h>       // waitpid
+#include <stdlib.h>         // exit
+#include <string.h>         // strlen
 #include <sys/stat.h>       // open, shm_open, shm_unlink, sem_open
 #include <fcntl.h>          // open, shm_open, shm_unlink, sem_open
 #include <errno.h>          // errno
-#include <sys/types.h>      // fork, waitpid, open, ftruncate
-#include <stdlib.h>         // exit
-#include <string.h>
-#include <stdio.h>
+#include <string.h>         // strcat, memset
+#include <sys/mman.h>       // shm_open, mmap, shm_unlink
+#include <semaphore.h>      // sem_open, sem_wait, sem_post
 
 #define CHECK_FAIL(functionName) ((errno != 0) ? (perror(functionName), exit(1)) : 0)
 #define MAX_NAME 30

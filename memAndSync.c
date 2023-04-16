@@ -1,5 +1,12 @@
 #include "memAndSync.h"
 
+
+
+/**
+ * Función que crea un semáforo con el nombre especificado y devuelve una estructura sema_t que lo representa.
+ * @param sem_name: nombre del semáforo.
+ * @return sema_t: estructura que contiene el nombre del semáforo y el descriptor de archivo asociado.
+*/
 sema_t sem_create(char * sem_name){
     sema_t toReturn={0};
     strcpy(toReturn.name,sem_name);
@@ -8,16 +15,20 @@ sema_t sem_create(char * sem_name){
     return toReturn;
 }
 
+/**
+ * Función que cierra y elimina el semáforo representado por la estructura sema_t.
+ * @param sem: puntero a la estructura sema_t que contiene el nombre y el descriptor de archivo asociado al semáforo.
+*/
 void sem_finish(sema_t * sem){
     sem_close(sem->access);
     CHECK_FAIL("sem-close");
 
     sem_unlink(sem->name);
-    CHECK_FAIL('sem-unlink');
+    CHECK_FAIL("sem_unlink");
 }
 
 shme_t shm_make(char * shm_name ,int size){
-    shme_t toReturn={0};
+    shme_t toReturn;
     toReturn.size=size;
     strcpy(toReturn.name,shm_name);
 
