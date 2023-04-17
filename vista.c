@@ -1,42 +1,54 @@
 #include "masterAndSlave.h"
 
 
-int main(int argc, char * argv[])
+int main( int argc , char * argv[] )
 {
     char * welcomeMessage = "Waiting for master...\n";
-    int shm_fd;                                             // file descriptor de la shared memory
-    char * shm_ptr;                                         // puntero a la shared memory
-    sem_t * sem;                                            // counting semaphore
-    int amount = 0;
     if( write( STDOUT_FILENO , welcomeMessage , strlen( welcomeMessage ) ) == -1 ){
         handle_error("write failed");
     }
 
-    shm_fd = shm_open( SHM_NAME , O_CREAT | O_RDWR , 0666 );    // apertura de la shared memory
-    if( shm_fd == -1 ){
+    /*  File descriptor de la shared memory */
+    int shm_fd;                                                       
+
+    /*  Puntero a la shared memory  */                                                    
+    char * shm_ptr;                                      
+
+    /*  Counting semaphore  */                                                                          
+    sem_t * sem;       
+
+    /*  Apertura de la shared memory  */
+    shm_fd = shm_open( SHM_NAME , O_CREAT | O_RDWR , 0666 );                                                      
+    if ( shm_fd == -1 ){
         handle_error( "shm_open failed vista" );
     }
 
-    if( ftruncate( shm_fd , SHM_SIZE ) == -1 ){                                             // se ajusta el tamaño deseado a la shm
+    /*  Se ajusta el tamaño deseado a la shm */
+    if ( ftruncate( shm_fd , SHM_SIZE ) == -1 ){                                                                           
         handle_error( "ftruncate failed vista" );
     }
 
-    shm_ptr = mmap( NULL , SHM_SIZE , PROT_READ | PROT_WRITE , MAP_SHARED , shm_fd , 0 );  // se mapea a la memoria virtual de este proceso
-     if ( shm_ptr == MAP_FAILED ) {
+    /*  Se mapea a la memoria virtual de este proceso  */ 
+    shm_ptr = mmap( NULL , SHM_SIZE , PROT_READ | PROT_WRITE , MAP_SHARED , shm_fd , 0 );                                         
+    if ( shm_ptr == MAP_FAILED ) {
         handle_error( "mmap failed vista" );
     }
 
-    sem = sem_open( SEM_NAME , O_CREAT , 0666 , 0 );             // se crea/obtiene el fd del semaforo
+    /*  Se crea/obtiene el fd del semaforo */ 
+    sem = sem_open( SEM_NAME , O_CREAT , 0666 , 0 );                                                                   
     if ( sem == SEM_FAILED ) {
-        handle_error( "sem_open failed vista" );                                                       // prints the error message to stderr
+        handle_error( "sem_open failed vista" );                                                      
     }
 
+    /*  Se obtiene la cantidad de archivos a leer  */
+    int amount = 0;
 
-    if( argc == 2 ){                                            // caso donde se corre vista aparte
+    /*  caso donde se corre vista aparte  */          
+    if ( argc == 2 ){                                                                                        
 
         amount = atoi( argv[1] );
 
-    }else if( argc == 1 ){                                      // caso donde se corre con el pipe
+    } else if ( argc == 1 ){   /*  caso donde se corre con el pipe */                                                                                        
 
         char readBuffer[ MAX_PATH_SIZE ];
         if( read( 0 , readBuffer , MAX_PATH_SIZE ) == -1 ){
@@ -45,7 +57,7 @@ int main(int argc, char * argv[])
 
         amount = atoi( readBuffer );
 
-    }else{
+    } else {
         handle_error( "Wrong amount of parameters" );
     }
 
@@ -54,28 +66,30 @@ int main(int argc, char * argv[])
     int offset = 0;
     for ( size_t i = 0 ; i < amount ; i++ ){
         sem_wait( sem ); 
-        //printf("OFFSET %d\n", offset);
-        //printf("SHARED MEMORY ENTERA : %s\n", shm_ptr);
        
-        size_t msgLen = strlen(shm_ptr + offset);
-        if( write( STDOUT_FILENO , shm_ptr  + offset  ,msgLen ) == -1 ){
+        size_t msgLen = strlen( shm_ptr + offset );
+        
+        /* escritura en stdout */
+        if( write( STDOUT_FILENO , shm_ptr  + offset  , msgLen ) == -1 ){                                
             handle_error( "write failed vista" );
-        }        // // escritura en stdout
+        }        
         offset += msgLen;
     }
     
-    // cerrar semaforo
+    /* cerrar semaforo */
     if ( sem_close( sem ) == -1 ) {
         handle_error( "sem_close failed vista" );
     }
 
-    // Unlink shared memory
+    /* Unlink shared memory */
     if ( munmap( shm_ptr , SHM_SIZE ) == -1 ) {
         handle_error( "munmap failed vista" );
     }
 
+    /*Close shared memory */
     if ( close( shm_fd ) == -1 ){
         handle_error( "close failed vista" );
     }
+
     return 0;
 }
