@@ -1,27 +1,22 @@
 #include "masterAndSlave.h"
+/* 
+ * El Master :
+ * Recibe los directorios de los archivos cuyos md5 se desea calcular ( no preocuparse por permisos o directorios invalidos )
+ * Inicia los procesos esclavos ( cantidad decidida arbitrariamente )
+ * Gestiona la cola de trabajo de los esclavos
+ * Recibe y almacena el resultado de cada esclavo en un buffer por orden de llegada
+ * Al ser inicializado debe esperar la aparición del proceso Vista, caso positivo debe compartir el buffer con dicho proceso
+ * Guarda el resultado en un archivos Results.txt
+ */
+void concat( const char* str1 , const char* str2 , char* buffer );
+void loadFileName( char * files[] ,int posFiles , int * whereToWrite , int posFd );
 
-// El Master :
-// Recibe los directorios de los archivos cuyos md5 se desea calcular ( no preocuparse por permisos o directorios invalidos )
-// Inicia los procesos esclavos ( cantidad decidida arbitrariamente )
-// Gestiona la cola de trabajo de los esclavos
-// Recibe y almacena el resultado de cada esclavo en un buffer por orden de llegada
-// Al ser inicializado debe esperar la aparición del proceso Vista, caso positivo debe compartir el buffer con dicho proceso
-// Guarda el resultado en un archivos Results.txt
-
-/**
-@param str1 string que funciona de base
-@param str2 string que se pone atras del str1
-@param buffer resultado de la concatenacion
-*/
-void concat(const char* str1, const char* str2, char* buffer);
-void loadFileName(char * files[],int posFiles, int * whereToWrite, int posFd);
-
-int main(int argc, char *argv[])
+int main( int argc , char *argv[] )
 {
     // Seteo en 0 de variable global para manejo de errores
     errno = 0;
     // Creacion de archivo de resultados
-    int fdResults = open("./results.txt", O_APPEND | O_RDWR | O_CREAT , ALL_PERMISSIONS);
+    int fdResults = open( "./results.txt", O_APPEND | O_RDWR | O_CREAT , ALL_PERMISSIONS );
     // Declaro variables
     int i, j, n;                                                                        // variables de ciclos
     // Calculo las subdivisiones
@@ -30,25 +25,29 @@ int main(int argc, char *argv[])
     int posNextFile = 1;                                                                // posicion del proximo archivo a procesar
     int initialLoad = (int) ceil(undigestedFiles/10.0);                                 // factor de carga inicial
     // Declaro Arrays de esclavos
-    int slavesReadPipe[qSlaves];                                                        // fd del cual cada esclavo lee el archivo que debe digerir
-    int slavesWritePipe[qSlaves];                                                       // fd donde escribe el resultado de la digestion
-    int masterReadPipe[qSlaves];                                                        // fd del cual el master lee el resultado de la digestion
-    int masterWritePipe[qSlaves];                                                       // fd donde el master escribe el archivo a digerir
-    char initiallyLoaded[qSlaves];                                                      // boolean de si fue cargada o no
-    memset(initiallyLoaded, 0, sizeof(initiallyLoaded));
-    char slaveStates[qSlaves];                                                          // cantidad de trabajo pendientes
-    memset(slaveStates, 0, sizeof(slaveStates));
+    int slavesReadPipe[ qSlaves ];                                                        // fd del cual cada esclavo lee el archivo que debe digerir
+    int slavesWritePipe[ qSlaves ];                                                       // fd donde escribe el resultado de la digestion
+    int masterReadPipe[ qSlaves ];                                                        // fd del cual el master lee el resultado de la digestion
+    int masterWritePipe[ qSlaves ];                                                       // fd donde el master escribe el archivo a digerir
+    char initiallyLoaded[ qSlaves ];                                                      // boolean de si fue cargada o no
+    memset( initiallyLoaded , 0 , sizeof( initiallyLoaded ) );
+    char slaveStates[ qSlaves ];                                                          // cantidad de trabajo pendientes
+    memset( slaveStates , 0 , sizeof( slaveStates ) );
 
 
     // Ordenamiento de pipes creados
-    for (n = 0; n < qSlaves; n++){
-        int mtosPipe[2];
-        pipe(mtosPipe); CHECK_FAIL("pipe");
+    for ( n = 0 ; n < qSlaves ; n++){
+        int mtosPipe[ 2 ];
+        if( pipe( mtosPipe ) < 0 ){
+            handle_error("pipe");
+        } 
         slavesReadPipe[n] = mtosPipe[0];
         masterWritePipe[n] = mtosPipe[1];
 
         int stomPipe[2];
-        pipe(stomPipe); CHECK_FAIL("pipe");
+        if( pipe( stomPipe ) < 0 ){
+            handle_error("pipe");
+        } 
         masterReadPipe[n] = stomPipe[0];
         slavesWritePipe[n] = stomPipe[1];
     }
@@ -139,9 +138,11 @@ int main(int argc, char *argv[])
         }
     }
 
-
-    struct timeval tv; tv.tv_sec = 1; tv.tv_usec = 0;
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
     // Monitoreo y Escritura sobre results.txt de forma dinamica
+    int offset=0;
     while(undigestedFiles != 0){
         // Cargado inicial de los buffers personalizados para cada slave con la carga inicial
         for (n = 0 ; n < qSlaves && posNextFile <= initialLoad * qSlaves ; n++){
@@ -157,7 +158,7 @@ int main(int argc, char *argv[])
 
         // Monitoreo de Fds para obtener una lectura no bloqueante
         int qFdsToRead = select(nfds, &readfds, NULL, NULL, &tv);
-        int offset=0;
+        
         for (n = 0; n < qSlaves && qFdsToRead != 0 ; n++){
             if (FD_ISSET(masterReadPipe[n] , &readfds)){
                 // lectura del buffer del slave que escribio su resultado
@@ -173,18 +174,21 @@ int main(int argc, char *argv[])
                 if(bytesWritten == -1){
                     handle_error("write failed");
                 }
-                /*  PREGUNTAR
-                if (strlen(resultBuffer) >= SHM_SIZE) {
-                    fprintf(stderr, "Error: resultBuffer too large for shared memory\n");
-                    exit(EXIT_FAILURE);
-                } */
-
+                
+                
+                    
                 // escritura en la memoria compartida
-                strcpy(shm_ptr+offset, resultBuffer); // mandamos la shared 
-                offset += strlen(resultBuffer) + 1;
+                strcpy(shm_ptr + offset, resultBuffer); // mandamos la shared 
+                offset += strlen(resultBuffer) ;
+
                 if( sem_post(sem) == - 1 ){//levantamos el semaforo asi no se bloquea
                     handle_error("sem_post failed");
                 } 
+                int value;
+                if (sem_getvalue(sem, &value) == -1) {
+                    perror("sem_getvalue");
+                    exit(EXIT_FAILURE);
+                }
 
                 // movimiento de variables
                 slaveStates[n]--;
@@ -246,7 +250,12 @@ int main(int argc, char *argv[])
 
 
 
-// concatena dos strings pero a diferencia de strcat no altera el string dest
+/**
+ * Función que concatena dos cadenas de caracteres en un buffer, sin modificar la cadena original de destino.
+ * @param str1 La primera cadena de caracteres a concatenar.
+ * @param str2 La segunda cadena de caracteres a concatenar.
+ * @param buffer Puntero al buffer donde se almacenará la cadena resultante de la concatenación.
+*/
 void concat(const char* str1, const char* str2, char* buffer) {
     size_t len1 = strlen(str1);
     size_t len2 = strlen(str2);
@@ -256,7 +265,13 @@ void concat(const char* str1, const char* str2, char* buffer) {
     buffer[size - 1] = '\0';
 }
 
-// carga el pipe compartido entre master y slave con el file requerido
+/**
+ * Carga en el pipe compartido entre master y slave el nombre del archivo requerido.
+ * @param files Arreglo de strings con los nombres de los archivos.
+ * @param posFiles Posición en el arreglo de strings del archivo a cargar.
+ * @param whereToWrite Arreglo de file descriptors para escribir en los pipes.
+ * @param posFd Posición en el arreglo de file descriptors del pipe a utilizar.
+ */
 void loadFileName(char * files[],int posFiles, int * whereToWrite, int posFd){
     char buffer[MAX_PATH_SIZE];
     concat(files[posFiles], "\n", buffer);

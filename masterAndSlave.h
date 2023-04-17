@@ -15,7 +15,6 @@
 #include <math.h>           // ceil
 #include <sys/mman.h>       // shm_open, mmap, shm_unlink
 #include <semaphore.h>      // sem_open, sem_wait, sem_post
-#include "memAndSync.h"
 
 #define STDIN 0
 #define STDOUT 1
@@ -26,10 +25,14 @@
 #define SEM_NAME "countingSemaphore"
 #define SHM_NAME "/shalom"
 #define SHM_SIZE 65536       // tamaño arbitrario
-#define MAX_BUFFER_SIZE 500 // tamaño arbitrario
+#define MAX_BUFFER_SIZE 45000 // tamaño arbitrario
 
-//int ftruncate(int fd, off_t length); // esto resuelvo un warning raro que habia
 
+/**
+ * Función que maneja errores. Recibe un mensaje de error como parámetro y lo imprime utilizando la función perror.
+ * Además, finaliza la ejecución del programa con un código de error utilizando la función exit.
+ * @param msg Mensaje de error a imprimir.
+ */
 void handle_error(const char* msg) {
     perror(msg);
     exit(EXIT_FAILURE);
