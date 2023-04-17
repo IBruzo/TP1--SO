@@ -23,18 +23,17 @@
 #define ALL_PERMISSIONS 0x00777
 #define MD5_SIZE 32
 #define MAX_PATH_SIZE 1024
-#define CHECK_FAIL(functionName) ((errno != 0) ? (perror(functionName), exit(1)) : 0)
 #define SEM_NAME "countingSemaphore"
 #define SHM_NAME "/shalom"
-#define SHM_SIZE 128       // tamaño arbitrario
-#define MAX_BUFFER_SIZE 500
+#define SHM_SIZE 65536       // tamaño arbitrario
+#define MAX_BUFFER_SIZE 500 // tamaño arbitrario
 
-int ftruncate(int fd, off_t length); // esto resuelvo un warning raro que habia
+//int ftruncate(int fd, off_t length); // esto resuelvo un warning raro que habia
 
-typedef int sem;
-sem canRead = 0;
-sem empty = SHM_SIZE;
-
+void handle_error(const char* msg) {
+    perror(msg);
+    exit(EXIT_FAILURE);
+}
 
 
 #endif

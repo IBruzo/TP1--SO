@@ -1,4 +1,4 @@
-#include "m&s.h"
+#include "masterAndSlave.h"
 
 // El Master :
 // Recibe los directorios de los archivos cuyos md5 se desea calcular ( no preocuparse por permisos o directorios invalidos )
@@ -59,17 +59,24 @@ int main(int argc, char *argv[])
     char * shm_ptr;                                                                     // puntero a la shared memory
     sem_t * sem;                                                                        // counting semaphore
 
-    sem = sem_open(SEM_NAME, O_CREAT, 0666, 1);                                         // se crea/obtiene el fd del semaforo
-    CHECK_FAIL("sem_open");
+    sem = sem_open(SEM_NAME, O_CREAT, 0666, 0);                                         // se crea/obtiene el fd del semaforo
+    if (sem == SEM_FAILED) {
+        handle_error("sem_open failed");                                                       // prints the error message to stderr
+    }
 
     shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);                                // fd de la shared memory
-    CHECK_FAIL("shm_fd");
+    if(shm_fd == -1){
+        handle_error("shm_open failed master");
+    }
 
-    ftruncate(shm_fd, SHM_SIZE);                                                        // se ajusta el tamaño deseado a la shm
-    CHECK_FAIL("ftruncate");
-
+    if( ftruncate(shm_fd, SHM_SIZE) == -1 ){                                             // se ajusta el tamaño deseado a la shm
+        handle_error("ftrncate failed");
+    }  
+        
     shm_ptr = mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);      // mapeo a la memoria virtual de este proceso
-    CHECK_FAIL("mmap");
+    if (shm_ptr == MAP_FAILED) {
+        handle_error("mmap failed");
+    }
 
     sleep(5);                                                                           // Se espera a la ejecucion del proceso vista
 
@@ -78,8 +85,9 @@ int main(int argc, char *argv[])
     sprintf(cantArgStr,"%d",argc-1);
     int aux = strlen(cantArgStr);
     cantArgStr[aux]='\n';
-    write(STDOUT,cantArgStr, aux+1);
-    CHECK_FAIL("write");
+    if(write(STDOUT_FILENO,cantArgStr, aux+1)==-1){
+        handle_error("write failed");
+    }
 
 
     // Creacion y Seteo del Select
@@ -107,25 +115,32 @@ int main(int argc, char *argv[])
 
     // Creacion de los Slaves
     for (n = 0; n < qSlaves; n++){
-        int forkStatus = fork(); CHECK_FAIL("fork");
+        int forkStatus = fork();
+        if(forkStatus == -1){
+            handle_error("fork failed");
+        }
+        
         // Logica de cada hijo que pasa a ser esclavo
         if (forkStatus == 0){
             // Ordenamiento de FDs
-            close(STDIN); dup(slavesReadPipe[n]);
-            CHECK_FAIL("dup");                                                          // FD_0 =  FD_RD_END del mtosPipe
-            close(STDOUT); dup(slavesWritePipe[n]);
-            CHECK_FAIL("dup");                                                          // FD_1 =  FD_WR_END del stomPipe
-            for(i = 3;  i < 4*(qSlaves)+4; i++)                                       // cierro pipes sobrantes, y el fd de shm
+            if (dup2(slavesReadPipe[n], STDIN_FILENO) == -1){
+                handle_error("dup");
+            }
+            if (dup2(slavesWritePipe[n], STDOUT_FILENO) == -1){
+                handle_error("dup");
+            }
+            for(i = 3;  i < 4*(qSlaves)+4; i++){
                 close(i);
+            }                                       // cierro pipes sobrantes, y el fd de shm
             // Transformacion a Esclavo
             char * const paramList[] = {"slave.out", NULL};
-            execve("slave.out", paramList, 0);
-            CHECK_FAIL("execve");
+            execve("slave.out", paramList, NULL);
+            handle_error("execve");
         }
     }
 
 
-
+    struct timeval tv; tv.tv_sec = 1; tv.tv_usec = 0;
     // Monitoreo y Escritura sobre results.txt de forma dinamica
     while(undigestedFiles != 0){
         // Cargado inicial de los buffers personalizados para cada slave con la carga inicial
@@ -141,21 +156,35 @@ int main(int argc, char *argv[])
         }
 
         // Monitoreo de Fds para obtener una lectura no bloqueante
-        int qFdsToRead = select(nfds,&readfds, NULL, NULL, NULL);
+        int qFdsToRead = select(nfds, &readfds, NULL, NULL, &tv);
+        int offset=0;
         for (n = 0; n < qSlaves && qFdsToRead != 0 ; n++){
             if (FD_ISSET(masterReadPipe[n] , &readfds)){
                 // lectura del buffer del slave que escribio su resultado
                 char resultBuffer[MAX_BUFFER_SIZE];
                 int bytesRead;
                 bytesRead = read(masterReadPipe[n], resultBuffer, MAX_BUFFER_SIZE);
-                CHECK_FAIL("read");
+                if (bytesRead == -1) {
+                    handle_error("read failed");
+                }
 
                 // escritura en el archivo Results.txt
-                write(fdResults, resultBuffer, bytesRead);
-                CHECK_FAIL("write");
+                int bytesWritten = write(fdResults, resultBuffer, bytesRead);
+                if(bytesWritten == -1){
+                    handle_error("write failed");
+                }
+                /*  PREGUNTAR
+                if (strlen(resultBuffer) >= SHM_SIZE) {
+                    fprintf(stderr, "Error: resultBuffer too large for shared memory\n");
+                    exit(EXIT_FAILURE);
+                } */
+
                 // escritura en la memoria compartida
-                strcpy(shm_ptr,resultBuffer); // mandamos la shared memory
-                sem_post(sem); //levantamos el semaforo asi no se bloquea
+                strcpy(shm_ptr+offset, resultBuffer); // mandamos la shared 
+                offset += strlen(resultBuffer) + 1;
+                if( sem_post(sem) == - 1 ){//levantamos el semaforo asi no se bloquea
+                    handle_error("sem_post failed");
+                } 
 
                 // movimiento de variables
                 slaveStates[n]--;
@@ -184,12 +213,38 @@ int main(int argc, char *argv[])
 
 
     //Cerrado de Fd del master, shared memory y semaforos
-    for (i = 3; i < 4 * qSlaves + 3; i++)
-        close(i);
-    sem_close(sem);
-    shm_unlink(SHM_NAME);
+    for (i = 3; i < 4 * qSlaves + 3; i++){
+        if(close(i) == - 1){
+            handle_error("close failed");
+        }
+    }
+    // cerrar semaforo
+    if (sem_close(sem) == -1) {
+        handle_error("sem_close failed");
+    }
+
+    // Unlink shared memory
+    if (munmap(shm_ptr, SHM_SIZE) == -1) {
+        handle_error("munmap failed");
+    }
+    if (shm_unlink(SHM_NAME) == -1) {
+        handle_error("shm_unlink failed");
+    }
+    if (close(shm_fd) == -1) {
+        handle_error("close failed");
+    }
+    // Unlink semaforo
+    if (sem_unlink(SEM_NAME) == -1) {
+        handle_error("sem_unlink failed");
+    }
+
+
     return 0;
 }
+
+
+
+
 
 // concatena dos strings pero a diferencia de strcat no altera el string dest
 void concat(const char* str1, const char* str2, char* buffer) {
@@ -205,7 +260,9 @@ void concat(const char* str1, const char* str2, char* buffer) {
 void loadFileName(char * files[],int posFiles, int * whereToWrite, int posFd){
     char buffer[MAX_PATH_SIZE];
     concat(files[posFiles], "\n", buffer);
-    write(whereToWrite[posFd],buffer, strlen(buffer));
-    CHECK_FAIL("write");
+    if(write(whereToWrite[posFd],buffer, strlen(buffer))==-1){
+        handle_error("write failed");
+    }
+
 }
 

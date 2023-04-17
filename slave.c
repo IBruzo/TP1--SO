@@ -1,4 +1,4 @@
-#include "m&s.h"
+#include "masterAndSlave.h"
 
 // El Esclavo :
 // Recibe el/los paths del los archivos a procesar, usa md5sum para hacer el calculo
@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
     snprintf(bufferPID, sizeof(bufferPID), "%d", slavepid);
 
     // se lee del buffer hasta que el master tire abajo el pipe y se reciba el EOF
-    while ((read(0,buffer,MAX_PATH_SIZE)) != EOF){
+    while ((read(0,buffer,MAX_PATH_SIZE)) > 0){
 
         // se utiliza un buffer alternativo para no alterar el buffer del pipe
         char bufferCopy[MAX_PATH_SIZE];
@@ -43,22 +43,26 @@ int main(int argc, char *argv[])
 
         while(token != NULL) {
             int pipefd[2];
-            pipe(pipefd);
-            CHECK_FAIL("pipe");
+            if(pipe(pipefd)==-1){
+                handle_error("pipe failed");
+            }
             // fdSlave = { [ 0 - readpipe1 ], [ 1 - writepipe2 ], [ 2 - stderr ], [ 3 - pipeRD(pipefd[0]) ], [ 4 - pipeWR(pipefd[1]) ] }
             int pid = fork();
-            CHECK_FAIL("pipe");
+            if(pid==-1){
+                handle_error("fork failed");
+            }
             if (pid == 0){
                 // ordeno los fds -> fdSlaveSon = { [ 0 - readpipe1 ], [ 4 - pipeWR(pipefd[1]) ], [ 2 - stderr ] }  */
-                close(STDOUT);
+                close(STDOUT_FILENO);
                 dup(pipefd[1]);
                 close(pipefd[0]);
                 close(pipefd[1]);
 
                 // la salida de md5sum va al buffer del pipe que comparte el slaveSon y Slave
                 char * const paramList[] = {"/usr/bin/md5sum", token ,NULL};
-                execve("/usr/bin/md5sum", paramList, 0);
-                CHECK_FAIL("execve");
+                if(execve("/usr/bin/md5sum", paramList, 0)==-1){
+                    handle_error("execve failed");
+                }
 
             }else{
                 // cierro el unico fd innecesario -> fdSlave = { [ 0 - readpipe1 ], [ 1 - writepipe2 ], [ 2 - stderr ], [ 3 - pipeRD(pipefd[0]) ] }
@@ -67,8 +71,9 @@ int main(int argc, char *argv[])
                 // creo el buffer donde se almacena el resultado del md5, obtenido por medio del pipe
                 char md5Output[MAX_BUFFER_SIZE];
                 int numRead;
-                while ((numRead = read(pipefd[0], md5Output, MAX_PATH_SIZE)) == 0);
-                CHECK_FAIL("read");
+                do {
+                    numRead = read(pipefd[0], md5Output, MAX_BUFFER_SIZE);
+                } while (numRead == -1 && errno == EINTR);
                 md5Output[numRead] = '\0';
 
                 // printeo por el stdout que al estar en el slave es el pipe de escritura del pipe que lo conecta con el master

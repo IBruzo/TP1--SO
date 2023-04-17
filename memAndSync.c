@@ -10,8 +10,10 @@
 sema_t sem_create(char * sem_name){
     sema_t toReturn={0};
     strcpy(toReturn.name,sem_name);
-    toReturn.access=sem_open(toReturn.name, O_CREAT, 0666, 1);             // se crea/obtiene el fd del semaforo
-    CHECK_FAIL("sem_open");
+    toReturn.access = sem_open(toReturn.name, O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH, 1);             // se crea/obtiene el fd del semaforo
+    if (toReturn.access == SEM_FAILED) {
+        handle_error("sem_open failed");
+    }
     return toReturn;
 }
 
@@ -20,11 +22,22 @@ sema_t sem_create(char * sem_name){
  * @param sem: puntero a la estructura sema_t que contiene el nombre y el descriptor de archivo asociado al semáforo.
 */
 void sem_finish(sema_t * sem){
-    sem_close(sem->access);
-    CHECK_FAIL("sem-close");
+    int result = sem_close(sem->access);
+    if (result == -1) {
+        handle_error("sem_close failed");
+    }
 
-    sem_unlink(sem->name);
-    CHECK_FAIL("sem_unlink");
+    result = sem_unlink(sem->name);
+    if (result == -1) {
+        handle_error("sem_unlink failed");
+    }
+}
+
+void sem_close2(sema_t * sem){
+    int result = sem_close(sem->access);
+    if (result == -1) {
+        handle_error("sem_close failed");
+    }
 }
 
 shme_t shm_make(char * shm_name ,int size){
@@ -33,13 +46,19 @@ shme_t shm_make(char * shm_name ,int size){
     strcpy(toReturn.name,shm_name);
 
     toReturn.fd = shm_open(shm_name, O_CREAT | O_RDWR, 0666);    // apertura de la shared memory
-    CHECK_FAIL("shm_open");
+    if (toReturn.fd == -1) {
+        handle_error("shm_open failed");
+    }
 
-    ftruncate(toReturn.fd, size);                            // se ajusta el tamaño deseado a la shm
-    CHECK_FAIL("ftruncate");
+    int result = ftruncate(toReturn.fd, size);                            // se ajusta el tamaño deseado a la shm
+    if (result == -1) {
+        handle_error("ftruncate failed");
+    }
 
     toReturn.address= mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, toReturn.fd, 0);  // se mapea a la memoria virtual de este proceso
-    CHECK_FAIL("mmap");
+    if (toReturn.address == MAP_FAILED) {
+        handle_error("mmap failed");
+    }
 
     return  toReturn;
 }
@@ -50,12 +69,18 @@ void shm_destory(shme_t * shared){
     char *address = shared->address;
     char *name = shared->name;
 
-    munmap(address, size);
-    CHECK_FAIL("mummap");
+    int result = munmap(address, size);
+    if (result == -1) {
+        handle_error("munmap failed");
+    }
 
-    shm_unlink(name);
-    CHECK_FAIL("shm_unlink");
+    result = shm_unlink(name);
+    if (result == -1) {
+        handle_error("shm_unlink failed");
+    }
 
-    close(fd);
-    CHECK_FAIL("close");
+    result = close(fd);
+    if (result == -1) {
+        handle_error("close failed");
+    }
 }

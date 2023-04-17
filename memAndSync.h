@@ -35,6 +35,7 @@ typedef struct
 
 sema_t sem_create(char * sem_name);
 void sem_finish(sema_t * sem);
+void sem_close2(sema_t * sem);
 
 shme_t shm_make(char * shm_name ,int size);
 void shm_destory(shme_t * shared);
