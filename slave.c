@@ -18,7 +18,7 @@ int main( int argc , char * argv[] )
     snprintf( bufferPID, sizeof( bufferPID ) , "%d" , slavepid );
 
     /* Se lee del buffer hasta que el master tire abajo el pipe y se reciba el EOF */
-    while ( ( read(0,buffer,MAX_PATH_SIZE) ) > 0 ){
+    while ( ( read( 0 , buffer , MAX_PATH_SIZE ) ) > 0 ){
 
         /* Se utiliza un buffer alternativo para no alterar el buffer del pipe */
         char bufferCopy[ MAX_PATH_SIZE ];
@@ -82,10 +82,14 @@ int main( int argc , char * argv[] )
                 fflush( stdout );
 
                 /* Cierro el pipe extra */
-                close( pipefd[0] );
+                if( close( pipefd[0] ) == -1 ){
+                    handle_error( "close failed slave" );
+                }
 
                 /* Esta logica tiene que estar sincronizada */
-                waitpid( pid, &childStatus , 0 );
+                if( waitpid( pid, &childStatus , 0 ) == -1){
+                    handle_error( "waitpid failed slave" );
+                }
             }
             token = strtok( NULL, s );
         }

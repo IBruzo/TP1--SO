@@ -40,15 +40,15 @@ int main( int argc , char * argv[] )
         handle_error( "sem_open failed vista" );                                                      
     }
 
-    /*  Se obtiene la cantidad de archivos a leer  */
+    /*  Cantidad de archivos a leer  */
     int amount = 0;
 
-    /*  caso donde se corre vista aparte  */          
+    /*  Caso donde se corre vista aparte  */          
     if ( argc == 2 ){                                                                                        
 
         amount = atoi( argv[1] );
 
-    } else if ( argc == 1 ){   /*  caso donde se corre con el pipe */                                                                                        
+    } else if ( argc == 1 ){   /*  Caso donde se corre con el pipe */                                                                                        
 
         char readBuffer[ MAX_PATH_SIZE ];
         if( read( 0 , readBuffer , MAX_PATH_SIZE ) == -1 ){
@@ -65,10 +65,12 @@ int main( int argc , char * argv[] )
 
     int offset = 0;
     for ( size_t i = 0 ; i < amount ; i++ ){
-        sem_wait( sem ); 
+        if(sem_wait( sem ) == -1){
+            handle_error( "sem_wait failed vista" );
+        } 
        
         size_t msgLen = strlen( shm_ptr + offset );
-        
+
         /* escritura en stdout */
         if( write( STDOUT_FILENO , shm_ptr  + offset  , msgLen ) == -1 ){                                
             handle_error( "write failed vista" );
