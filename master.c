@@ -151,7 +151,7 @@ int main( int argc , char *argv[] )
 
     
     /* Monitoreo y Escritura sobre results.txt de forma dinamica */
-    int offset=0;
+    int offset = 0;
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
