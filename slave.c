@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+
 #include "masterAndSlave.h"
 
 /* 
@@ -24,18 +27,6 @@ int main( int argc , char * argv[] )
         char bufferCopy[ MAX_PATH_SIZE ];
         strncpy( bufferCopy , buffer , MAX_PATH_SIZE );
 
-        /*
-        Luego de la carga estatica el buffer puede tener varios archivos
-            buffer = "Archivo1.txt\nArchivo2.txt\nArchivo3.txt\n"
-            - entra al while
-            token = "Archivo1.txt"
-            token = "Archivo2.txt"
-            token = "Archivo3.txt"
-        Cuando comienza la carga dinamica, siempre se carga de a 1
-            buffer = "Archivo4.txt\n"
-            token = "Archivo4.txt"
-        */
-
         const char * s = "\n";
         char * token;
         token = strtok( bufferCopy , s );
@@ -57,10 +48,11 @@ int main( int argc , char * argv[] )
                 close( pipefd[ 0 ] );
                 close( pipefd[ 1 ] );
 
-                /* La salida de md5sum va al buffer del pipe que comparte el slaveSon y Slave */
-                char * const paramList[] = { "/usr/bin/md5sum" , token , NULL };
-                if ( execve( "/usr/bin/md5sum" , paramList , 0 ) == -1 ){
-                    handle_error( "execve failed" );
+                /* La salida de md5sum va al buffer del pipe que comparte el slaveSon y Slave */ 
+                char * filePathMD5 = "/usr/bin/md5sum";
+                char * const paramList[] = { filePathMD5 , token , NULL };
+                if ( execvpe( filePathMD5 , paramList , 0 ) == -1 ){
+                    handle_error( "execve failed slave" );
                 }
 
             } else {

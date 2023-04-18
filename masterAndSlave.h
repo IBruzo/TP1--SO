@@ -1,6 +1,10 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+
 #ifndef MYHEADER_H
 #define MYHEADER_H
 
+#define _GNU_SOURCE         /*  implicit declaration of execvpe                  */
 #include <stdio.h>          /*  printf                                           */   
 #include <sys/types.h>      /*  fork, waitpid, open, ftruncate                   */                           
 #include <unistd.h>         /*  fork, execve, pipe, dup, close, read, ftruncate  */                                            
@@ -14,18 +18,20 @@
 #include <sys/select.h>     /*  select                                           */   
 #include <math.h>           /*  ceil                                             */ 
 #include <sys/mman.h>       /*  shm_open, mmap, shm_unlink                       */                       
-#include <semaphore.h>      /*  sem_open, sem_wait, sem_post                     */                         
+#include <semaphore.h>      /*  sem_open, sem_wait, sem_post                     */    
+#include "semaforo.h"       /*  semaforos                                        */
+#include "shared.h"         /*  memoria compartida                               */
+
 #define STDIN 0
 #define STDOUT 1
 #define STDERR 2
 #define ALL_PERMISSIONS 0x00777        /* permisos de lectura, escritura y ejecución */
-#define MD5_SIZE 32
-#define MAX_PATH_SIZE 2048             /* tamaño arbitrario */
-#define SEM_NAME "countingSemaphore"   /* nombre arbitrario */
-#define SHM_NAME "/shalom"             /* nombre arbitrario */
-#define SHM_SIZE 65536                 /* tamaño arbitrario */
-#define MAX_BUFFER_SIZE 65536          /* tamaño arbitrario */
-
+#define MD5_SIZE 32                    /* tamaño de un hash MD5                      */
+#define MAX_PATH_SIZE 2048             /* tamaño arbitrario                          */
+#define SEM_NAME "countingSemaphore"   /* nombre arbitrario                          */
+#define SHM_NAME "/shalom"             /* nombre arbitrario                          */
+#define SHM_SIZE 65536                 /* tamaño arbitrario                          */
+#define MAX_BUFFER_SIZE 65536          /* tamaño arbitrario                          */
 
 /**
  * Función que maneja errores. Recibe un mensaje de error como parámetro y lo imprime utilizando la función perror.
@@ -36,6 +42,5 @@ void handle_error( const char * msg ) {
     perror( msg );
     exit( EXIT_FAILURE );
 }
-
 
 #endif

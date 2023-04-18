@@ -1,34 +1,21 @@
 # TP1--SO
-el tp 1 de la materia sistemas operativos 1c2023
-Grupo Joaquin Girod, Chris Ijjas, Ignacio Bruzone, Iñaki Bengolea
+El TP 1 de la materia sistemas operativos 1C2023
+Grupo : Joaquin Girod, Chris Ijjas, Ignacio Bruzone, Iñaki Bengolea
 
+- Definicion de Archivos Ejecutables : 
+El ejecutable master toma por parametros los archivos que se desean codificar, utiliza una cantidad arbitraria de procesos esclavos para aprovechar la independencia de este mecanismo y paralelizar la codificacion, aumentando la eficiencia.
+El ejecutable vista toma por parametro la cantidad de archivos ingresados a master e imprime por salida estandar el resultado de las codificaciones que logra el master en tiempo real. Esto lo logra utilizando metodos de sincronizacion y memoria compartida. Se puede ejecutar tanto de forma aislada como por medio de un pipe.
 
-- ACLARACION : deberia funcionar correctamente, hay un mini backlog de boludeces que hacer al fondo del archivo
-- ACLARACION2 : no borren los printfs, es mas practico debuggear con eso que ir uno por uno los 3 mil ciclos
+- Formato de Ejecucion :
+./master [ filesToHash ]
+./vista [ argc ]
 
-- ultimo comando de testing: prueben lo que sea deberia funcar, si encuentran bugs avisen
+- Comando utilizado para la creacion de los Archivos de Prueba : 
+rm testFiles/*; cd testFiles/;for i in {1..87}; do echo "This is some sample text for file $i" > file_$i.txt; done; cd ..
 
-- STDOUT/consola : Tira info general
-
-- results.txt : Deberia tirar lo correcto
-
-- comando de bash que tira chatgpt, para crear la carpeta con los 20 archivos y que cada uno tenga un poco de texto ( algo de texto para la codificacion, creo que afecta ) ( Joaco no uso ese script, no sabe si funca ) :
-
-#!/bin/bash
-
-# Create directory
-mkdir testFiles
-
-# Loop through letters A to T
-for i in {65..84}; do
-  # Create file with respective letter
-  touch testFiles/$(printf '%b' $(printf '\\x%x' $i)).txt
-
-  # Write letter 20 times to file
-  printf $(printf '\\x%x' $i)%.0s {1..20} >> testFiles/$(printf '%b' $(printf '\\x%x' $i)).txt
-done
- 
-
-
-
+- Comandos utilizados para ejecutar :
+Opcion 1 :  make clean; make all; ./master.out ./testFiles/*
+Opcion 2 :  make clean; make all; ./master.out ./testFiles/* | ./vista.out
+Opcion 3 :  make clean; make all; ./master.out ./testFiles/* 
+            ./vista.out [ argc ]     (( en otra terminal ))
 

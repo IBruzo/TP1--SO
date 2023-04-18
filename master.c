@@ -1,4 +1,7 @@
-#include "masterAndSlave.h" // importa variables de entorno librerias, constantes y funciones
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+
+#include "masterAndSlave.h"  /* importa variables de entorno librerias, constantes y funciones */
 
 /* 
  * Master :
@@ -7,160 +10,75 @@
  * Gestiona la cola de trabajo de los esclavos
  * Recibe y almacena el resultado de cada esclavo en un buffer por orden de llegada
  * Al ser inicializado debe esperar la aparición del proceso Vista, caso positivo debe compartir el buffer con dicho proceso
- * Guarda el resultado en un archivos Results.txt
+ * Guarda el resultado en un archivos results.txt
  */
 
 
-void concat( const char * str1 , const char * str2 , char * buffer , size_t bufferSize ) ;
-
+int createResultsFile();
+void createSlavesPipes( int qSlaves , int slavesReadPipe[] , int masterWritePipe[] , int slavesWritePipe[] , int masterReadPipe[] );
+void writeNumberOfFiles( int argc );
+void setSelectArray( fd_set * readfds , int qSlaves , int masterReadPipe[] );
+void spawnSlaves( int qSlaves , int slavesReadPipe[] , int slavesWritePipe[] ) ;
 void loadFileName( char * files[] , int posFiles , int * whereToWrite , int posFd );
+
+
 
 int main( int argc , char *argv[] )
 {
-    /* Seteo en 0 de variable global para manejo de errores */
-    errno = 0;
-
     /* Creacion de archivo de resultados */
-    int fdResults = open( "./results.txt" , O_APPEND | O_RDWR | O_CREAT , ALL_PERMISSIONS );
-    if( fdResults == -1 ){
-        handle_error( "open results.txt master" );
-    }
+    int fdResults = createResultsFile();
+    
 
     /* variables de ciclos */
     int i, j, n;
 
     /* Calculo las subdivisiones */
-    int undigestedFiles = argc - 1;                                                      /* archivos que faltan procesar            */     
-    int qSlaves = ( int ) ceil( ( double ) undigestedFiles/50.0 );                       /* cantidad de esclavos                    */     
-    int posNextFile = 1;                                                                 /* posicion del proximo archivo a procesar */ 
-    int initialLoad = ( int ) ceil( undigestedFiles/50.0 );                              /* factor de carga inicial                 */    
+    int undigestedFiles = argc - 1;                                                     /* archivos que faltan procesar            */     
+    int qSlaves = ( int ) ceil( ( double ) undigestedFiles/50.0 );                      /* cantidad de esclavos                    */     
+    int posNextFile = 1;                                                                /* posicion del proximo archivo a procesar */ 
+    int initialLoad = ( int ) ceil( undigestedFiles/50.0 );                             /* factor de carga inicial                 */    
 
     /* Arrays de esclavos */
-    int slavesReadPipe[ qSlaves ];                                                       /*  fd del cual cada esclavo lee el archivo que debe digerir   */                              
-    int slavesWritePipe[ qSlaves ];                                                      /*  fd donde escribe el resultado de la digestion              */                   
-    int masterReadPipe[ qSlaves ];                                                       /*  fd del cual el master lee el resultado de la digestion     */                            
-    int masterWritePipe[ qSlaves ];                                                      /*  fd donde el master escribe el archivo a digerir            */                     
-    char initiallyLoaded[ qSlaves ];                                                     /*  boolean de si fue cargada o no                             */    
+    int slavesReadPipe[ qSlaves ];                                                      /*  fd del cual cada esclavo lee el archivo que debe digerir   */                              
+    int slavesWritePipe[ qSlaves ];                                                     /*  fd donde escribe el resultado de la digestion              */                   
+    int masterReadPipe[ qSlaves ];                                                      /*  fd del cual el master lee el resultado de la digestion     */                            
+    int masterWritePipe[ qSlaves ];                                                     /*  fd donde el master escribe el archivo a digerir            */                     
+    char initiallyLoaded[ qSlaves ];                                                    /*  boolean de si fue cargada o no                             */    
     memset( initiallyLoaded , 0 , sizeof( initiallyLoaded ) );
-    char slaveStates[ qSlaves ];                                                         /*  cantidad de trabajo pendientes                             */    
+    char slaveStates[ qSlaves ];                                                        /*  cantidad de trabajo pendientes                             */    
     memset( slaveStates , 0 , sizeof( slaveStates ) );
 
-
-    /* Ordenamiento de pipes creados */
-    for ( n = 0 ; n < qSlaves ; n++){
-        int mtosPipe[ 2 ];                                                               /* master to slave Pipe */
-        if ( pipe( mtosPipe ) < 0 ){
-            handle_error( "pipe master 1" );
-        } 
-        slavesReadPipe[ n ] = mtosPipe[ 0 ];
-        masterWritePipe[ n ] = mtosPipe[ 1 ];
-
-        int stomPipe[ 2 ];                                                               /* slave to master Pipe */
-        if ( pipe( stomPipe ) < 0 ){
-            handle_error("pipe master 2");
-        } 
-        masterReadPipe[ n ] = stomPipe[ 0 ];
-        slavesWritePipe[ n ] = stomPipe[ 1 ];
-    }
-
+    /* Creacion de tuberías */
+    createSlavesPipes(qSlaves, slavesReadPipe, masterWritePipe, slavesWritePipe, masterReadPipe);
 
     /* Manejo de Semaforos y Shared Memory */
-    int shmFd;                                                                            /*  fd de shared memory                        */
-    char * shmPtr;                                                                        /*  puntero a la shared memory                 */        
-    sem_t * sem;                                                                          /*  counting semaphore                         */
+    shme_t shmPtr = shmMake( SHM_NAME , SHM_SIZE );                                       
+    sema_t sem = semCreate( SEM_NAME );
 
-    sem = sem_open( SEM_NAME , O_CREAT , 0666 , 0 );                                      /*  se crea/obtiene el fd del semaforo         */                
-    if ( sem == SEM_FAILED ) {
-        handle_error( "sem_open failed master" );                                                 /*  prints the error message to stderr         */                
-    }
-
-    shmFd = shm_open( SHM_NAME , O_CREAT | O_RDWR , 0666 );                               /*  fd de la shared memory                     */    
-    if ( shmFd == -1 ){
-        handle_error( "shm_open failed master" );
-    }
-
-    if ( ftruncate( shmFd, SHM_SIZE ) == -1 ){                                            /*  se ajusta el tamaño deseado a la shm       */                   
-        handle_error( "ftrncate failed master" );
-    }  
-        
-    shmPtr = mmap( NULL , SHM_SIZE , PROT_READ | PROT_WRITE , MAP_SHARED , shmFd , 0);   /*  mapeo a la memoria virtual de este proceso */                        
-    if ( shmPtr == MAP_FAILED ) {
-        handle_error( "mmap failed master" );
-    }
-
-    sleep( 5 );                                                                           /*  Se espera a la ejecucion del proceso vista */                       
+    sleep( 5 );                                                                         /*  Se espera a la ejecucion del proceso vista */                       
 
     /* Retorno de la informacion requerida por el Vista por STDOUT (cantidad de archivos a hashear) */
-    char cantArgStr[ MAX_BUFFER_SIZE ] = { 0 };
-    sprintf( cantArgStr , "%d" , argc-1 );
-    int aux = strlen( cantArgStr );
-    cantArgStr[ aux ] = '\n';
-    if ( write( STDOUT_FILENO , cantArgStr , aux + 1 ) == -1 ){
-        handle_error("write failed master");
-    }
-
+    writeNumberOfFiles( argc );
 
     /* Creacion y Seteo del Select */
-    int nfdSlave = 4 * qSlaves + 3;
-    fd_set readfds;                                                                        /*  array con los fds a monitorear        */                 
-    FD_ZERO( &readfds );                                                                   /*  limpio el set                         */
-    for ( n = 0 ; n < qSlaves ; n++ ){
-        FD_SET( masterReadPipe[ n ] , &readfds );                                          /*  seteo los fds de lectura del master   */                      
-    }
-
-    /*
-    Visualizacion de los File Descriptors :
-
-    fd master = {       [ 0 - stdin ],      [ 1 - stdout ],         [ 2 - stderr ],        [ 3 - readpipe1 ],      [ 4 - writepipe1 ],
-                        [ 5 - readpipe2 ],  [ 6 - writepipe2 ] .... [ 2N+1 - readpipeN ],  [ 2(N+1) - writepipeN ], [ 2(N+1)+1 - shm ] }
-
-    fd slave1 = { [ 3 - readpipe1 ],              [ 6 - writepipe2 ],         [ 2 - stderr ] }  (( OBJETIVO ))
-    fd slave2 = { [ 7 - readpipe3 ],              [ 10 - writepipe4 ],        [ 2 - stderr ] }
-    fd slave3 = { [ 11 - readpipe5 ],             [ 14 - writepipe6 ],        [ 2 - stderr ] }
-    ...
-    fd slaveN = { [ (4N-1) - readpipe(2N-1) ],    [ (4N+2) - writepipe(2N) ], [ 2 - stderr ] }
-
-    */
-
+    fd_set readfds;                                                                     /*  array con los fds a monitorear    */
+    setSelectArray( &readfds , qSlaves , masterReadPipe );                   
 
     /* Creacion de los Slaves */
-    for ( n = 0 ; n < qSlaves ; n++ ){
-        int forkStatus = fork();
-        if( forkStatus == -1 ){
-            handle_error( "fork failed master" );
-        }
-        
-        /*  Logica de cada hijo que pasa a ser esclavo */
-        if ( forkStatus == 0 ){
-            /*  Ordenamiento de FDs */
-            if ( dup2( slavesReadPipe[ n ] , STDIN_FILENO ) == -1 ){
-                handle_error( "dup master 1" );
-            }
-            if ( dup2( slavesWritePipe[ n ] , STDOUT_FILENO ) == -1 ){
-                handle_error( "dup master 2" );
-            }
-            int totalFds = 4 * ( qSlaves ) + 4;
-            for ( i = 3 ; i < totalFds ; i++ ){                                     /* cierro pipes sobrantes, y el fd de shm */
-                close( i );
-            }                                      
-            /* Transformacion a Esclavo */
-            char * const paramList[] = { "slave.out" , NULL };
-            execve( "slave.out" , paramList , NULL );
-            handle_error( "execve" );
-        }
-    }
+    spawnSlaves( qSlaves , slavesReadPipe , slavesWritePipe );
 
     
     /* Monitoreo y Escritura sobre results.txt de forma dinamica */
+    int nfdSlave = 4 * qSlaves + 3;
     int offset = 0;
-    struct timeval tv;
+    struct timeval tv;                                                                  /* por consejo de internet para que no se bloquee el select */
     tv.tv_sec = 1;
     tv.tv_usec = 0;
 
     while( undigestedFiles > 0 ){
         /* Cargado inicial de los buffers personalizados para cada slave con la carga inicial */
         for ( n = 0 ; n < qSlaves && posNextFile <= initialLoad * qSlaves  ; n++){
-            if ( initiallyLoaded[n] == 0 && slaveStates[n] == 0 ){
+            if ( initiallyLoaded[ n ] == 0 && slaveStates[ n ] == 0 ){
                 for ( j = posNextFile ; j < ( posNextFile + initialLoad ) ; j++ ){
                 
                     loadFileName( argv , j , masterWritePipe , n );
@@ -185,23 +103,20 @@ int main( int argc , char *argv[] )
                     handle_error( "read failed master" );
                 }
 
-                /* escritura en el archivo Results.txt */
+                /* escritura en el archivo results.txt */
                 int bytesWritten = write( fdResults , resultBuffer , bytesRead );
                 if( bytesWritten == -1 ){
                     handle_error( "write failed master" );
                 }
                 
-                
-                    
                 /* escritura en la memoria compartida */
-                strcpy( shmPtr + offset , resultBuffer );                                     /* mandamos la shared  */
+                strcpy( shmPtr.address + offset , resultBuffer );                      /* mandamos la shared  */
                 offset += strlen( resultBuffer ) ;
 
-                if( sem_post( sem ) == - 1 ){                                                  /* levantamos el semaforo asi no se bloquea */
+                if( sem_post( sem.access ) == - 1 ){                                      /* levantamos el semaforo asi no se bloquea */
                     handle_error( "sem_post failed master" );
                 } 
                 
-
                 /* movimiento de variables */
                 slaveStates[ n ]--;
                 qFdsToRead--;
@@ -237,26 +152,13 @@ int main( int argc , char *argv[] )
             handle_error( "close failed master" );
         }
     }
-    /* cerrar semaforo */
-    if ( sem_close( sem ) == -1) {
-        handle_error( "sem_close failed master" );
-    }
-
+    
     /* Unlink shared memory */
-    if ( munmap( shmPtr , SHM_SIZE ) == -1) {
-        handle_error("munmap failed master");
-    }
-    if (shm_unlink( SHM_NAME ) == -1 ) {
-        handle_error( "shm_unlink failed master" );
-    }
-    if ( close( shmFd ) == -1 ) {
-        handle_error( "close failed master" );
-    }
-    /* Unlink semaforo */
-    if ( sem_unlink( SEM_NAME ) == -1 ) {
-        handle_error( "sem_unlink failed master" );
-    }
+    shmDestroy( &shmPtr );
 
+    /* Unlink semaforo */
+    semFinish( &sem );
+    
 
     return 0;
 }
@@ -271,7 +173,7 @@ int main( int argc , char *argv[] )
  * @param buffer Puntero al buffer donde se almacenará la cadena resultante de la concatenación.
  * @param bufferSize Tamaño del buffer.
 */
-void concat( const char * str1 , const char* str2 , char* buffer , size_t bufferSize ) {
+static void concat( const char * str1 , const char* str2 , char* buffer , size_t bufferSize ) {
     size_t len1 = strlen( str1 );
     size_t len2 = strlen( str2 );
     size_t requiredSize = len1 + len2 + 1;
@@ -293,6 +195,118 @@ void loadFileName( char * files[] , int posFiles , int * whereToWrite , int posF
     concat( files[ posFiles ] , "\n" , buffer , MAX_PATH_SIZE );
     if( write( whereToWrite[ posFd ] , buffer , strlen( buffer ) ) == -1 ){
         handle_error( "write failed" );
+    }
+}
+
+/**
+ * Crea el archivo results.txt para almacenar los resultados de los slaves.
+ * @return File descriptor del archivo results.txt.
+ */
+int createResultsFile(){
+    int fdResults = open( "results.txt" , O_WRONLY | O_CREAT | O_TRUNC , 0666 );
+    if ( fdResults < 0 ){
+        handle_error( "open results.txt" );
+    }
+    return fdResults;
+}
+
+
+/**
+ * createSlavePipes - Crea los pipes necesarios para comunicar procesos esclavos con el proceso maestro.
+ * @param qSlaves Cantidad de procesos esclavos.
+ * @param slavesReadPipe Arreglo para almacenar los pipes de lectura de los procesos esclavos.
+ * @param masterWritePipe Arreglo para almacenar los pipes de escritura del proceso maestro.
+ * @param slavesWritePipe Arreglo para almacenar los pipes de escritura de los procesos esclavos.
+ * @param masterReadPipe Arreglo para almacenar los pipes de lectura del proceso maestro.
+*/
+void createSlavesPipes(int qSlaves, int slavesReadPipe[], int masterWritePipe[], int slavesWritePipe[], int masterReadPipe[]) {
+    int mtosPipe[2]; /* master to slave Pipe */
+    int stomPipe[2]; /* slave to master Pipe */
+    int n;
+
+    /* Create pipes for each slave process */
+    for (n = 0; n < qSlaves; n++) {
+        /* Create master to slave pipe */
+        if (pipe(mtosPipe) < 0) {
+            handle_error("Error creating master to slave pipe");
+        }
+        slavesReadPipe[n] = mtosPipe[0];
+        masterWritePipe[n] = mtosPipe[1];
+
+        /* Create slave to master pipe */
+        if (pipe(stomPipe) < 0) {
+            handle_error("Error creating slave to master pipe");
+        }
+        masterReadPipe[n] = stomPipe[0];
+        slavesWritePipe[n] = stomPipe[1];
+    }
+}
+
+
+/**
+ * Configura el conjunto de descriptores de archivo para monitorear con select() en los pipes de lectura del proceso principal
+ * @param readfds - un puntero al arreglo fd_set que será llenado con los pipes de lectura del proceso principal
+ * @param qSlaves - la cantidad de procesos esclavos
+ * @param masterReadPipe - un arreglo que contiene los descriptores de archivo de los pipes de lectura del proceso principal para cada proceso esclavo
+ */
+void setSelectArray( fd_set * readfds , int qSlaves , int masterReadPipe[] ) {
+    int n;
+    FD_ZERO( readfds );                                                                 /* seteo en 0 */  
+    for ( n = 0 ; n < qSlaves ; n++ ) {
+        FD_SET( masterReadPipe[ n ] , readfds );                                        /* seteo los fds a monitorear */
+    }
+}
+
+
+/**
+ * Función que escribe en el stdout del proceso master la cantidad de archivos que recibio, en caso de ejecutar vista por medio
+ * de un pipe, el stdout se toma para el stdin del proceso vista.
+ * @param argc cantidad de argumentos pasados por línea de comandos.
+ */
+void writeNumberOfFiles( int argc ){
+    char cantArgStr[ MAX_BUFFER_SIZE ] = { 0 };
+    sprintf( cantArgStr , "%d" , argc-1 );
+    int aux = strlen( cantArgStr );
+    cantArgStr[ aux ] = '\n';
+    if ( write( STDOUT_FILENO , cantArgStr , aux + 1 ) == -1 ){
+        handle_error( "write failed master" );
+    }
+}
+
+/**
+ * La función spawnSlaves se encarga de crear una cantidad de procesos hijos determinada por qSlaves y ordenar sus file descriptors para la
+ * comunicación con el proceso padre.
+ * @param qSlaves Cantidad de esclavos a crear.
+ * @param slavesReadPipe Arreglo de FDs de lectura de pipes que conectan a los esclavos con el proceso padre.
+ * @param slavesWritePipe Arreglo de FDs de escritura de pipes que conectan a los esclavos con el proceso padre.
+ */
+void spawnSlaves( int qSlaves , int slavesReadPipe[] , int slavesWritePipe[] ) {
+    int k, l;
+
+    for ( k = 0 ; k < qSlaves ; k++ ) {
+        int forkStatus = fork();
+        if ( forkStatus == -1 ) {
+            handle_error( "fork failed master" );
+        }
+
+        /* Logica de cada hijo que pasa a ser esclavo */
+        if ( forkStatus == 0 ) {
+            /* Ordenamiento de FDs */
+            if ( dup2( slavesReadPipe[ k ] , STDIN_FILENO ) == -1 ) {
+                handle_error("dup master 1");
+            }
+            if ( dup2( slavesWritePipe[ k ] , STDOUT_FILENO ) == -1 ) {
+                handle_error( "dup master 2" );
+            }
+            int totalFds = 4 * qSlaves + 4;
+            for ( l = 3 ; l < totalFds ; l++ ) { /* cierro pipes sobrantes, y el fd de shm */
+                close( l );
+            }
+            /* Transformacion a Esclavo */
+            char * const paramList[] = { "slave.out" , NULL };
+            execve( "slave.out" , paramList , NULL);
+            handle_error( "execve" );
+        }
     }
 }
 
